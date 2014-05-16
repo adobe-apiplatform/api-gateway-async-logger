@@ -7,10 +7,8 @@
 -- Implements the new Version 4 HMAC authorization.
 --
 local resty_sha256 = require "resty.sha256"
-local resty_sha1 = require "resty.sha1"
 local str = require "resty.string"
--- Manual: http://mkottman.github.io/luacrypto/manual.html
-local crypto = require 'crypto'
+local resty_hmac = require "resty.hmac"
 
 local HmacAuthV4Handler = {}
 
@@ -19,28 +17,27 @@ function HmacAuthV4Handler:new(o)
     setmetatable(o, self)
     self.__index = self
     if ( o ~= nil) then
-        self.service_name = o.service_name
-        self.region_name = o.region_name
+        self.aws_service = o.aws_service
+        self.aws_region = o.aws_region
     end
     return o
 end
 
-local function _sign_sha256(key, msg, raw)
-    local binary_format = raw or false
-    local digest = crypto.hmac.digest('sha256', msg, key, binary_format)
+local function _sign_sha256_FFI(key, msg, raw)
+    local hmac_sha256 = resty_hmac:new()
+    local digest = hmac_sha256:digest("sha256",key, msg, raw)
     return digest
 end
 
 
 local function _sha256_hex(msg)
-    --return crypto.digest("sha256", msg)
     local sha256 = resty_sha256:new()
     sha256:update(msg)
     local digest = str.to_hex(sha256:final())
     return digest
 end
 
-local _sign = _sign_sha256
+local _sign = _sign_sha256_FFI
 local _hash = _sha256_hex
 
 local function get_hashed_canonical_request(method, uri, querystring, headers, requestPayload, date)
@@ -55,7 +52,6 @@ local function get_hashed_canonical_request(method, uri, querystring, headers, r
 
     ngx.log(ngx.WARN, "Canonical String to Sign is:\n" .. sss)
 
-    --local digest = crypto.digest("sha256", sss)
     local sha256 = resty_sha256:new()
     sha256:update(sss)
     local digest = str.to_hex(sha256:final())
@@ -106,7 +102,7 @@ local function get_derived_signing_key(aws_secret_key, date, region, service )
     return kSigning
 end
 
-local function getSignature()
+function HmacAuthV4Handler:getSignature()
     local aws_secret = ngx.var.aws_secret_key
     local utc = ngx.utctime()
     local date1 = string.gsub(string.sub(utc, 1, 10),"-","")
@@ -130,7 +126,13 @@ local function getSignature()
 end
 
 
-return getSignature()
+local authH = HmacAuthV4Handler:new({
+    aws_region  = "us-east-1",
+    aws_service = "sns"
+})
+
+return HmacAuthV4Handler
+
 
 
 

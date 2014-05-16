@@ -15,6 +15,8 @@ my $pwd = cwd();
 
 our $HttpConfig = <<_EOC_;
     # lua_package_path "$pwd/scripts/?.lua;;";
+    lua_package_path 'src/lua/?.lua;;';
+    lua_package_cpath 'src/lua/?.so;;';
     init_by_lua '
         local v = require "jit.v"
         v.on("$Test::Nginx::Util::ErrLogFile")
@@ -44,19 +46,22 @@ __DATA__
 
             set $x_amz_date "TBD";
             set $x_amz_date_short 'TBD';
-            set_by_lua_file $auth_signature /Users/ddascal/Projects/github_adobe/api-gateway-logger/src/lua/aws/AwsV4Signature.lua;
+            set_by_lua $auth_signature '
+                local AWSV4S = require "aws.AwsV4Signature"
+                local awsAuth =  AWSV4S:new( {
+                                               aws_region  = ngx.var.aws_region,
+                                               aws_service = ngx.var.aws_service
+                                          })
+                return awsAuth:getSignature()
+            ';
 
             # proxy_pass https://$aws_service.$aws_region.amazonaws.com/;
             proxy_pass https://$aws_service.$aws_region.amazonaws.com/$request_uri;
             proxy_set_header Authorization "AWS4-HMAC-SHA256 Credential=$aws_access_key/$x_amz_date_short/$aws_region/$aws_service/$aws_request_code,SignedHeaders=host;x-amz-date,Signature=$auth_signature";
-            # proxy_set_header Content-Length 0;
-            proxy_set_header X-Amz-Date $x_amz_date;
-            # proxy_set_header Date 20140516;
 
-            # content_by_lua '
-            #    ngx.say( ngx.var.x_amz_date )
-            #';
+            proxy_set_header X-Amz-Date $x_amz_date;
         }
+
 --- more_headers
 X-Test: test
 --- request
