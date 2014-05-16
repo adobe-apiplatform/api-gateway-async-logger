@@ -12,6 +12,18 @@ Developer guide
  Since this module is running inside the `api-gateway`, make sure the api-gateway binary is installed under `/usr/local/sbin`.
  You should have 2 binaries in there: `api-gateway` and `nginx`, the latter being only a symbolik link.
 
+## Install luacrypto lib second
+Source code is found at: `https://github.com/mkottman/luacrypto`
+```
+cd /tmp/
+wget https://github.com/mkottman/luacrypto/archive/0.3.2.tar.gz
+tar -xvf 0.3.2.tar.gz
+cd 0.3.2
+./configure
+make install
+cp /usr/local/lib/crypto.so /usr/local/lib/lua/5.1/crypto.so
+```
+
 ## Update git submodules
 ```
 git submodule update --init --recursive
