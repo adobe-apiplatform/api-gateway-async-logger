@@ -33,7 +33,11 @@ end
 
 
 local function _sha256_hex(msg)
-    return crypto.digest("sha256", msg)
+    --return crypto.digest("sha256", msg)
+    local sha256 = resty_sha256:new()
+    sha256:update(msg)
+    local digest = str.to_hex(sha256:final())
+    return digest
 end
 
 local _sign = _sign_sha256
@@ -51,7 +55,10 @@ local function get_hashed_canonical_request(method, uri, querystring, headers, r
 
     ngx.log(ngx.WARN, "Canonical String to Sign is:\n" .. sss)
 
-    local digest = crypto.digest("sha256", sss)
+    --local digest = crypto.digest("sha256", sss)
+    local sha256 = resty_sha256:new()
+    sha256:update(sss)
+    local digest = str.to_hex(sha256:final())
 
     ngx.log(ngx.WARN, "Canonical String DIGEST is:\n" .. digest)
 
