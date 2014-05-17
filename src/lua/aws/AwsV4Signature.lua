@@ -33,35 +33,32 @@ end
 local function _sha256_hex(msg)
     local sha256 = resty_sha256:new()
     sha256:update(msg)
-    local digest = str.to_hex(sha256:final())
-    return digest
+    return str.to_hex(sha256:final())
 end
 
 local _sign = _sign_sha256_FFI
 local _hash = _sha256_hex
 
-local function get_hashed_canonical_request(method, uri, querystring, headers, requestPayload, date)
-    local sss = "POST\n" ..
-                 "/test-signature\n" ..
-                 "Action=Publish&Message=hello_from_nginx&TopicArn=arn%3Aaws%3Asns%3Aus-east-1%3A492299007544%3Aapiplatform-dev-ue1-topic-analytics\n" ..
-                 "host:sns.us-east-1.amazonaws.com\n" ..
-                 "x-amz-date:" .. date .. "\n" ..
-                 "\n" ..
-                 "host;x-amz-date\n" ..
-                 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+--local function get_hashed_canonical_request_OLD(method, uri, querystring, headers, requestPayload, date)
+--    local hash = "POST\n" ..
+--                 "/test-signature\n" ..
+--                 "Action=Publish&Message=hello_from_nginx&TopicArn=arn%3Aaws%3Asns%3Aus-east-1%3A492299007544%3Aapiplatform-dev-ue1-topic-analytics\n" ..
+--                 "host:sns.us-east-1.amazonaws.com\n" ..
+--                 "x-amz-date:" .. date .. "\n" ..
+--                 "\n" ..
+--                 "host;x-amz-date\n" ..
+--                 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+--
+--    ngx.log(ngx.WARN, "Canonical String to Sign is:\n" .. hash)
+--
+--    local digest = _hash(hash)
+--
+--    ngx.log(ngx.WARN, "Canonical String DIGEST is:\n" .. digest)
+--
+--    return digest
+--end
 
-    ngx.log(ngx.WARN, "Canonical String to Sign is:\n" .. sss)
-
-    local sha256 = resty_sha256:new()
-    sha256:update(sss)
-    local digest = str.to_hex(sha256:final())
-
-    ngx.log(ngx.WARN, "Canonical String DIGEST is:\n" .. digest)
-
-    return digest
-end
-
-local function get_hashed_canonical_request2(method, uri, querystring, headers, requestPayload)
+local function get_hashed_canonical_request(method, uri, querystring, headers, requestPayload)
     local hash = method .. '\n' ..
                  uri .. '\n' ..
                 (querystring or "") .. '\n'
@@ -76,7 +73,8 @@ local function get_hashed_canonical_request2(method, uri, querystring, headers, 
     --remove the last ";" from the signedHeaders
     signedHeaders = string.sub(signedHeaders, 1, -2)
 
-    hash = hash .. canonicalHeaders .. "\n" .. signedHeaders .. "\n"
+    hash = hash .. canonicalHeaders .. "\n"
+            .. signedHeaders .. "\n"
 
     hash = hash .. _hash(requestPayload or "")
 
@@ -102,7 +100,7 @@ local function get_derived_signing_key(aws_secret_key, date, region, service )
     return kSigning
 end
 
-function HmacAuthV4Handler:getSignature()
+function HmacAuthV4Handler:getSignature(http_method, request_uri, uri_arg_table )
     local aws_secret = ngx.var.aws_secret_key
     local utc = ngx.utctime()
     local date1 = string.gsub(string.sub(utc, 1, 10),"-","")
@@ -110,26 +108,27 @@ function HmacAuthV4Handler:getSignature()
     ngx.var.x_amz_date = date2
     ngx.var.x_amz_date_short = date1
     local headers = {}
-    headers.host = "sns.us-east-1.amazonaws.com"
+    headers.host = self.aws_service .. "." .. self.aws_region .. ".amazonaws.com"
     headers["x-amz-date"] = date2
     --headers["content-type"] = "application/x-www-form-urlencoded; charset=utf-8"
     --headers["content-length"] = 0
+    -- ensure parameters in query string are in order
+
+
+
     local sign = _sign( get_derived_signing_key( aws_secret,
                                              date1,
-                                             "us-east-1",
-                                             "sns"),
+                                             self.aws_region,
+                                             self.aws_service),
                     get_string_to_sign("AWS4-HMAC-SHA256",
                                         date2,
-                                        date1 .. "/us-east-1/sns/aws4_request",
-                                        get_hashed_canonical_request("POST", "/", "Action=Publish&Message=hello_from_nginx&TopicArn=arn%3Aaws%3Asns%3Aus-east-1%3A492299007544%3Aapiplatform-dev-ue1-topic-analytics", headers, "", date2) ) )
+                                        date1 .. "/" .. self.aws_region .. "/" .. self.aws_service .. "/aws4_request",
+                                        get_hashed_canonical_request(
+                                            http_method, request_uri,
+                                            "Action=Publish&Message=hello_from_nginx&Subject=nginx&TopicArn=arn%3Aaws%3Asns%3Aus-east-1%3A492299007544%3Aapiplatform-dev-ue1-topic-analytics",
+                                            headers, "", date2) ) )
     return sign
 end
-
-
-local authH = HmacAuthV4Handler:new({
-    aws_region  = "us-east-1",
-    aws_service = "sns"
-})
 
 return HmacAuthV4Handler
 

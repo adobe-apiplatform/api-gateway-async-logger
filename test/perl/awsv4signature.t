@@ -44,15 +44,19 @@ __DATA__
             # set_by_lua_file $query /Users/ddascal/Projects/github_adobe/api-gateway-logger/src/lua/aws/sdb.lua;
             # rewrite .* /?$query break;
 
-            set $x_amz_date "TBD";
-            set $x_amz_date_short 'TBD';
+            set $x_amz_date '';
+            set $x_amz_date_short '';
+
             set_by_lua $auth_signature '
                 local AWSV4S = require "aws.AwsV4Signature"
                 local awsAuth =  AWSV4S:new( {
                                                aws_region  = ngx.var.aws_region,
                                                aws_service = ngx.var.aws_service
                                           })
-                return awsAuth:getSignature()
+                return awsAuth:getSignature(
+                                        ngx.var.request_method,
+                                        "/test-signature",
+                                        ngx.req.get_uri_args())
             ';
 
             # proxy_pass https://$aws_service.$aws_region.amazonaws.com/;
@@ -65,7 +69,7 @@ __DATA__
 --- more_headers
 X-Test: test
 --- request
-POST /test-signature?Message=hello_from_nginx&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics&Action=Publish
+POST /test-signature?Action=Publish&Message=hello_from_nginx&Subject=nginx&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics
 --- response_body eval
 ["OK"]
 --- error_code: 200
