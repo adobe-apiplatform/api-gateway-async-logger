@@ -100,8 +100,48 @@ local function get_derived_signing_key(aws_secret_key, date, region, service )
     return kSigning
 end
 
+function urlEncode(inputString)
+        if (inputString) then
+            inputString = string.gsub (inputString, "\n", "\r\n")
+            inputString = string.gsub (inputString, "([^%w %-%_%.%~])",
+                function (c) return string.format ("%%%02X", string.byte(c)) end)
+            inputString = string.gsub (inputString, " ", "+")
+        end
+        return inputString
+end
+
+function HmacAuthV4Handler:formatQueryString(uri_args)
+    local uri = ""
+    for name, line in sortQueryStringInAlphaOrder(uri_args) do
+        uri = uri .. urlEncode(name) .. "=" .. urlEncode(line) .. "&"
+    end
+    --remove the last "&" from the signedHeaders
+    uri = string.sub(uri, 1, -2)
+    return uri
+end
+
+function sortQueryStringInAlphaOrder(uri_args)
+    local urlParameterKeys = {}
+    -- insert all the url parameter keys into array
+    for n in pairs(uri_args) do
+        table.insert(urlParameterKeys, n)
+    end
+    -- sort the keys
+    table.sort(urlParameterKeys)
+    -- use the keys to get the values out of the uri_args table in alphabetical order
+    local i = 0
+    local keyValueIterator = function ()
+        i = i + 1
+        if urlParameterKeys[i] == nil then
+            return nil
+        end
+        return urlParameterKeys[i], uri_args[urlParameterKeys[i]]
+    end
+    return keyValueIterator
+end
 
 function HmacAuthV4Handler:getSignature(http_method, request_uri, uri_arg_table )
+    local uri_args = self:formatQueryString(uri_arg_table)
     local aws_secret = ngx.var.aws_secret_key
     local utc = ngx.utctime()
     local date1 = string.gsub(string.sub(utc, 1, 10),"-","")
@@ -123,7 +163,7 @@ function HmacAuthV4Handler:getSignature(http_method, request_uri, uri_arg_table 
             date1 .. "/" .. self.aws_region .. "/" .. self.aws_service .. "/aws4_request",
             get_hashed_canonical_request(
                 http_method, request_uri,
-                "Action=Publish&Message=hello_from_nginx&Subject=nginx&TopicArn=arn%3Aaws%3Asns%3Aus-east-1%3A492299007544%3Aapiplatform-dev-ue1-topic-analytics",
+                uri_args,
                 headers, "", date2) ) )
     return sign
 end
