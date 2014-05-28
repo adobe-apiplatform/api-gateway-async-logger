@@ -14,9 +14,7 @@ local setmetatable = setmetatable
 local error = error
 
 
-module(...)
-
-_VERSION = '0.08'
+local _M = { _VERSION = '0.09' }
 
 
 local mt = { __index = _M }
@@ -41,33 +39,35 @@ const EVP_MD *EVP_sha512(void);
 -- table definind the available algorithms and the length of each digest
 -- for more information @see: http://csrc.nist.gov/publications/fips/fips180-4/fips-180-4.pdf
 local available_algorithms = {
-    sha1   = { method = "EVP_sha1",   length = 160/8   },
-    sha224 = { method = "EVP_sha224", length = 224/8   },
-    sha256 = { method = "EVP_sha256", length = 256/8   },
-    sha384 = { method = "EVP_sha384", length = 384/8   },
-    sha512 = { method = "EVP_sha512", length = 512/8   }
+    sha1   = { alg = C.EVP_sha1(),   length = 160/8  },
+    sha224 = { alg = C.EVP_sha224(), length = 224/8  },
+    sha256 = { alg = C.EVP_sha256(), length = 256/8  },
+    sha384 = { alg = C.EVP_sha384(), length = 384/8  },
+    sha512 = { alg = C.EVP_sha512(), length = 512/8  }
 }
 
+-- 64 is the max lenght and it covers up to sha512 algorithm
+local digest_len = ffi_new("int[?]", 64)
+local buf = ffi_new("char[?]", 64)
 
-function new(self)
+
+function _M.new(self)
     return setmetatable({}, mt)
 end
 
 local function getDigestAlgorithm(dtype)
     local md_name = available_algorithms[dtype]
     if ( md_name == nil ) then
-        error("attempt to use unkown algorithm: '" .. dtype ..
+        error("attempt to use unknown algorithm: '" .. dtype ..
                 "'.\n Available algorithms are: sha1,sha224,sha256,sha384,sha512")
     end
-    return C[md_name.method](), md_name.length
+    return md_name.alg, md_name.length
 end
 
 ---
--- Returns the HMAC-SHA256 digest.
+-- Returns the HMAC digest. The hashing algorithm is defined by the dtype parameter.
 -- The optional raw flag, defaulted to false, is a boolean indicating whether the output should be a direct binary
 -- equivalent of the HMAC or formatted as a hexadecimal string (the default)
---
--- TBD: should this method be more generic and support multiple hashing algorithms ( I.e. SHA1,SHA224,SHA256,SHA384,SHA512 ) ?
 --
 -- @param self
 -- @param dtype The hashing algorithm to use is specified by dtype
@@ -75,30 +75,20 @@ end
 -- @param msg The message to be signed
 -- @param raw When true, it returns the binary format, else, the hex format is returned
 --
-function digest(self, dtype, key, msg, raw)
-    local binary_format = raw or false
-    --local evp_md = C.EVP_sha256()
+function _M.digest(self, dtype, key, msg, raw)
     local evp_md, digest_length_int = getDigestAlgorithm(dtype)
-
-    local digest_len = ffi_new("int[?]", digest_length_int)
-    local buf = ffi_new("char[?]", digest_length_int)
+    if key == nil or msg == nil then
+        error("attempt to digest with a null key or message")
+    end
 
     C.HMAC(evp_md, key, #key, msg, #msg, buf, digest_len)
 
-    if binary_format == true then
+    if raw == true then
         return ffi_str(buf,digest_length_int)
     end
+
     return resty_string.to_hex(ffi_str(buf,digest_length_int))
 end
 
 
-local class_mt = {
-    -- to prevent use of casual module global variables
-    __newindex = function (table, key, val)
-        error('attempt to write to undeclared variable "' .. key .. '"')
-    end
-}
-
-setmetatable(_M, class_mt)
-
-
+return _M
