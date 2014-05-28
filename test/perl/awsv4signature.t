@@ -30,19 +30,17 @@ run_tests();
 
 __DATA__
 
-=== TEST 1: test aws s4 signature
+
+=== TEST 5: test aws s4 signature and post using tcp
 --- http_config eval: $::HttpConfig
 --- config
         location /test-signature {
-            resolver 10.8.4.247;
             set $aws_access_key AKIAIBF2BKMFXSCLCR4Q;
             set $aws_secret_key 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;
             set $aws_region us-east-1;
             set $aws_service sns;
             set $aws_request_code aws4_request;
-
-            # set_by_lua_file $query /Users/ddascal/Projects/github_adobe/api-gateway-logger/src/lua/aws/sdb.lua;
-            # rewrite .* /?$query break;
+            resolver 10.8.4.247;
 
             set $x_amz_date '';
             set $x_amz_date_short '';
@@ -59,13 +57,73 @@ __DATA__
                                         ngx.req.get_uri_args())
             ';
 
-            # proxy_pass https://$aws_service.$aws_region.amazonaws.com/;
-            proxy_pass https://$aws_service.$aws_region.amazonaws.com/$request_uri;
-            proxy_set_header Authorization "AWS4-HMAC-SHA256 Credential=$aws_access_key/$x_amz_date_short/$aws_region/$aws_service/$aws_request_code,SignedHeaders=host;x-amz-date,Signature=$auth_signature";
 
-            proxy_set_header X-Amz-Date $x_amz_date;
+            content_by_lua '
+
+                local host = ngx.var.aws_service .."." .. ngx.var.aws_region .. ".amazonaws.com"
+                local authorization = "AWS4-HMAC-SHA256 Credential=" .. ngx.var.aws_access_key.."/" .. ngx.var.x_amz_date_short .. "/" .. ngx.var.aws_region .."/" .. ngx.var.aws_service.."/"..ngx.var.aws_request_code..",SignedHeaders=host;x-amz-date,Signature="..ngx.var.auth_signature
+                local amzdate = ngx.var.x_amz_date
+                local topicarn = "arn%3Aaws%3Asns%3Aus-east-1%3A492299007544%3Aapiplatform-dev-ue1-topic-analytics"
+                local message = "hello_from_nginx"
+                local subject ="nginx"
+
+                local AWSV4S = require "aws.AwsV4Signature"
+                local awsAuth =  AWSV4S:new()
+                local jsonbody = awsAuth:formatQueryString(ngx.req.get_uri_args())
+
+                local tcp = ngx.socket.tcp
+                local sock = tcp()
+                sock:settimeout(100000)
+
+                ok, err = sock:connect(host,80)
+                if err then
+                    ngx.log(ngx.ERR, "error in connecting to socket" .. err)
+                end
+
+                local uri = jsonbody
+
+                local reqline = "POST "  .. uri .. " HTTP/1.1" .. "\\r\\n"
+
+
+                local headers = "Content-Type" .. ":" .. "application/x-www-form-urlencoded; charset=utf-8" .."\\r\\n" ..
+                          "X-Amz-Date" .. ":" .. ngx.var.x_amz_date .."\\r\\n" ..
+                          "Authorization" .. ":" .. authorization .."\\r\\n" ..
+                          "Content-Length" .. ":" .. "185" .. "\\r\\n"
+
+                bytes, err = sock:send(reqline .. headers)
+                if err then
+                    ngx.log(ngx.ERR, "error in sending header to socket" .. err)
+                    sock:close()
+                    return nil, err
+                end
+                ngx.say("------------")
+                ngx.say(bytes)
+                ngx.say("------------")
+
+                local http = require "logger.http"
+                local hc = http:new()
+
+
+                local ok, code, headers, status, body  = hc:request {
+                        url = host,
+                        host = host,
+                        method = "POST",
+                        body = jsonbody,
+                        headers = { Authorization = authorization,["X-Amz-Date"] = amzdate,
+                        ["Content-Type"] = "application/x-www-form-urlencoded",
+                        ["Content-Length"] = #jsonbody
+                         },
+                }
+                ngx.say(ok)
+                ngx.say(code)
+                ngx.say(status)
+                ngx.say(body)
+
+
+            ';
+
+
         }
-
 --- more_headers
 X-Test: test
 --- request
@@ -76,112 +134,3 @@ POST /test-signature?Action=Publish&Message=hello_from_nginx&Subject=nginx&Topic
 --- no_error_log
 [error]
 
-
-
-
-=== TEST 2: test aws s4 signature with request args in random alphabetical order
---- http_config eval: $::HttpConfig
---- config
-        location /test-signature {
-            resolver 10.8.4.247;
-            set $aws_access_key AKIAIBF2BKMFXSCLCR4Q;
-            set $aws_secret_key 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;
-            set $aws_region us-east-1;
-            set $aws_service sns;
-            set $aws_request_code aws4_request;
-
-            set $x_amz_date '';
-            set $x_amz_date_short '';
-
-            set_by_lua $auth_signature '
-                local AWSV4S = require "aws.AwsV4Signature"
-                local awsAuth =  AWSV4S:new( {
-                                               aws_region  = ngx.var.aws_region,
-                                               aws_service = ngx.var.aws_service
-                                          })
-                return awsAuth:getSignature(
-                                        ngx.var.request_method,
-                                        "/test-signature",
-                                        ngx.req.get_uri_args())
-            ';
-
-            proxy_pass https://$aws_service.$aws_region.amazonaws.com/$request_uri;
-            proxy_set_header Authorization "AWS4-HMAC-SHA256 Credential=$aws_access_key/$x_amz_date_short/$aws_region/$aws_service/$aws_request_code,SignedHeaders=host;x-amz-date,Signature=$auth_signature";
-
-            proxy_set_header X-Amz-Date $x_amz_date;
-        }
-
---- more_headers
-X-Test: test
---- request
-POST /test-signature?Subject=nginx&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics&Message=hello_from_nginx&Action=Publish
---- response_body eval
-["OK"]
---- error_code: 200
---- no_error_log
-[error]
-
-=== TEST 3: test aws s4 signature with special chars in request args
---- http_config eval: $::HttpConfig
---- config
-        location /test-signature {
-            resolver 10.8.4.247;
-            set $aws_access_key AKIAIBF2BKMFXSCLCR4Q;
-            set $aws_secret_key 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;
-            set $aws_region us-east-1;
-            set $aws_service sns;
-            set $aws_request_code aws4_request;
-
-            set $x_amz_date '';
-            set $x_amz_date_short '';
-
-            set_by_lua $auth_signature '
-                local AWSV4S = require "aws.AwsV4Signature"
-                local awsAuth =  AWSV4S:new( {
-                                               aws_region  = ngx.var.aws_region,
-                                               aws_service = ngx.var.aws_service
-                                          })
-                return awsAuth:getSignature(
-                                        ngx.var.request_method,
-                                        "/test-signature",
-                                        ngx.req.get_uri_args())
-            ';
-
-            proxy_pass https://$aws_service.$aws_region.amazonaws.com/$request_uri;
-            proxy_set_header Authorization "AWS4-HMAC-SHA256 Credential=$aws_access_key/$x_amz_date_short/$aws_region/$aws_service/$aws_request_code,SignedHeaders=host;x-amz-date,Signature=$auth_signature";
-
-            proxy_set_header X-Amz-Date $x_amz_date;
-        }
-
---- more_headers
-X-Test: test
---- request
-POST /test-signature?Subject=nginx:test!@$&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics&Message=hello_from_nginx!&Action=Publish
---- response_body eval
-["OK"]
---- error_code: 200
---- no_error_log
-[error]
-
-
-=== TEST 4: test request args with same first character
---- http_config eval: $::HttpConfig
---- config
-        location /test-signature {
-
-            content_by_lua '
-                local AWSV4S = require "aws.AwsV4Signature"
-                local awsAuth =  AWSV4S:new()
-                ngx.print(awsAuth:formatQueryString(ngx.req.get_uri_args()))
-            ';
-        }
-
---- more_headers
-X-Test: test
---- request
-POST /test-signature?Subject=nginx:test!@$&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics&Message=hello_from_nginx!&Action=Publish&Subject1=nginx:test
---- response_body eval
-["Action=Publish&Message=hello_from_nginx%21&Subject=nginx%3Atest%21%40%24&Subject1=nginx%3Atest&TopicArn=arn%3Aaws%3Asns%3Aus-east-1%3A492299007544%3Aapiplatform-dev-ue1-topic-analytics"]
---- error_code: 200
---- no_error_log
-[error]
