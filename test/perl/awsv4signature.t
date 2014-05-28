@@ -54,21 +54,32 @@ __DATA__
                                    aws_service = ngx.var.aws_service
                               })
 
+                local requestbody = "Action=Publish&Subject=HELLO-FROM-POST&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics"
+
+                local msg = "I MAY BE A LONG MESSAGE.YOU HAVE BEEN WARNED"
+                for i=1,60000 do msg = msg .. "abcd" end
+
+                requestbody = requestbody .. "&Message=" .. msg
+
                 local authorization = awsAuth:getAuthorizationHeader( ngx.var.request_method,
                                                                     "/test-signature",
-                                                                    ngx.req.get_uri_args())
-
-                local jsonbody = awsAuth:formatQueryString(ngx.req.get_uri_args())
+                                                                    {}, -- ngx.req.get_uri_args()
+                                                                    requestbody)
 
                 local http = require "logger.http"
                 local hc = http:new()
 
 
                 local ok, code, headers, status, body  = hc:request {
-                        url = "/test-signature?" .. jsonbody,
+                        url = "/test-signature", -- .. "?" .. ngx.var.args,
                         host = host,
+                        body = requestbody,
                         method = ngx.var.request_method,
-                        headers = { Authorization = authorization,["X-Amz-Date"] = awsAuth.aws_date}
+                        headers = {
+                                    Authorization = authorization,
+                                    ["X-Amz-Date"] = awsAuth.aws_date,
+                                    ["Content-Type"] = "application/x-www-form-urlencoded"
+                                }
                 }
                 ngx.say(ok)
                 ngx.say(code)
@@ -79,7 +90,7 @@ __DATA__
 --- more_headers
 X-Test: test
 --- request
-POST /test-signature?Action=Publish&Message=cosocket-is-awesome&Subject=nginx-with-cosocket&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics
+POST /test-signature?Action=Publish&Message=POST-cosocket-is-awesome&Subject=nginx-with-cosocket-and-POST-body&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics
 --- response_body eval
 ["OK"]
 --- error_code: 200

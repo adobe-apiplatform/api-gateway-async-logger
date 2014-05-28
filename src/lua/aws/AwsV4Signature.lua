@@ -43,25 +43,6 @@ end
 local _sign = _sign_sha256_FFI
 local _hash = _sha256_hex
 
---local function get_hashed_canonical_request_OLD(method, uri, querystring, headers, requestPayload, date)
---    local hash = "POST\n" ..
---                 "/test-signature\n" ..
---                 "Action=Publish&Message=hello_from_nginx&TopicArn=arn%3Aaws%3Asns%3Aus-east-1%3A492299007544%3Aapiplatform-dev-ue1-topic-analytics\n" ..
---                 "host:sns.us-east-1.amazonaws.com\n" ..
---                 "x-amz-date:" .. date .. "\n" ..
---                 "\n" ..
---                 "host;x-amz-date\n" ..
---                 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
---
---    ngx.log(ngx.WARN, "Canonical String to Sign is:\n" .. hash)
---
---    local digest = _hash(hash)
---
---    ngx.log(ngx.WARN, "Canonical String DIGEST is:\n" .. digest)
---
---    return digest
---end
-
 local function get_hashed_canonical_request(method, uri, querystring, headers, requestPayload)
     local hash = method .. '\n' ..
                  uri .. '\n' ..
@@ -153,7 +134,7 @@ function getTableIterator(uri_args, urlParameterKeys)
     return keyValueIterator
 end
 
-function HmacAuthV4Handler:getSignature(http_method, request_uri, uri_arg_table )
+function HmacAuthV4Handler:getSignature(http_method, request_uri, uri_arg_table, request_payload )
     local uri_args = self:formatQueryString(uri_arg_table)
     local aws_secret = ngx.var.aws_secret_key
     local utc = ngx.utctime()
@@ -177,12 +158,12 @@ function HmacAuthV4Handler:getSignature(http_method, request_uri, uri_arg_table 
             get_hashed_canonical_request(
                 http_method, request_uri,
                 uri_args,
-                headers, "", date2) ) )
+                headers, request_payload) ) )
     return sign
 end
 
-function HmacAuthV4Handler:getAuthorizationHeader(http_method, request_uri, uri_arg_table )
-    local auth_signature = self:getSignature(http_method, request_uri, uri_arg_table)
+function HmacAuthV4Handler:getAuthorizationHeader(http_method, request_uri, uri_arg_table, request_payload )
+    local auth_signature = self:getSignature(http_method, request_uri, uri_arg_table, request_payload)
     local authHeader = "AWS4-HMAC-SHA256 Credential=" .. ngx.var.aws_access_key.."/" .. self.aws_date_short .. "/" .. ngx.var.aws_region
            .."/" .. ngx.var.aws_service.."/aws4_request,SignedHeaders=host;x-amz-date,Signature="..auth_signature
     return authHeader
