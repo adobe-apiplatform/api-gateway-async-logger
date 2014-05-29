@@ -30,8 +30,29 @@ run_tests();
 
 __DATA__
 
+=== TEST 1: test request args with same first character
+--- http_config eval: $::HttpConfig
+--- config
+        location /test-signature {
 
-=== TEST 5: test aws s4 signature and post using tcp
+            content_by_lua '
+                local AWSV4S = require "aws.AwsV4Signature"
+                local awsAuth =  AWSV4S:new()
+                ngx.print(awsAuth:formatQueryString(ngx.req.get_uri_args()))
+            ';
+        }
+
+--- more_headers
+X-Test: test
+--- request
+POST /test-signature?Subject=nginx:test!@$&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics&Message=hello_from_nginx!&Action=Publish&Subject1=nginx:test
+--- response_body eval
+["Action=Publish&Message=hello_from_nginx%21&Subject=nginx%3Atest%21%40%24&Subject1=nginx%3Atest&TopicArn=arn%3Aaws%3Asns%3Aus-east-1%3A492299007544%3Aapiplatform-dev-ue1-topic-analytics"]
+--- error_code: 200
+--- no_error_log
+[error]
+
+=== TEST 2: test aws s4 signature and post using tcp and request uri args for sns unordered
 --- http_config eval: $::HttpConfig
 --- config
         location /test-signature {
@@ -45,8 +66,6 @@ __DATA__
             content_by_lua '
 
                 local host = ngx.var.aws_service .."." .. ngx.var.aws_region .. ".amazonaws.com"
-
-                local amzdate = ngx.var.x_amz_date
 
                 local AWSV4S = require "aws.AwsV4Signature"
                 local awsAuth =  AWSV4S:new({
@@ -91,8 +110,68 @@ __DATA__
 X-Test: test
 --- request
 POST /test-signature?Action=Publish&Message=POST-cosocket-is-awesome&Subject=nginx-with-cosocket-and-POST-body&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics
---- response_body eval
-["OK"]
+--- response_body_like eval
+[".*PublishResult.*ResponseMetadata.*"]
+--- error_code: 200
+--- no_error_log
+[error]
+
+=== TEST 3: test aws s4 signature and post using GET and request uri args for sns unordered
+--- http_config eval: $::HttpConfig
+--- config
+        location /test-signature {
+            set $aws_access_key AKIAIBF2BKMFXSCLCR4Q;
+            set $aws_secret_key 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;
+            set $aws_region us-east-1;
+            set $aws_service sns;
+
+            resolver 10.8.4.247;
+
+            content_by_lua '
+
+                local host = ngx.var.aws_service .."." .. ngx.var.aws_region .. ".amazonaws.com"
+
+                local AWSV4S = require "aws.AwsV4Signature"
+                local awsAuth =  AWSV4S:new({
+                                   aws_region  = ngx.var.aws_region,
+                                   aws_service = ngx.var.aws_service
+                              })
+
+
+                local authorization = awsAuth:getAuthorizationHeader( ngx.var.request_method,
+                                                                    "/test-signature",
+                                                                    ngx.req.get_uri_args(),
+                                                                    ""
+                                                                    )
+
+                local requestbody = awsAuth:formatQueryString(ngx.req.get_uri_args())
+
+                local http = require "logger.http"
+                local hc = http:new()
+
+
+                local ok, code, headers, status, body  = hc:request {
+                        url = "/test-signature" .. "?" .. requestbody,
+                        host = host,
+                        method = ngx.var.request_method,
+                        timeout = 60000,
+                        headers = {
+                                    Authorization = authorization,
+                                    ["X-Amz-Date"] = awsAuth.aws_date
+                                }
+                }
+                ngx.say(ok)
+                ngx.say(code)
+                ngx.say(status)
+                ngx.say(body)
+            ';
+        }
+--- more_headers
+X-Test: test
+--- request
+GET /test-signature?Action=Publish&Message=POST-cosocket-is-awesome&Subject=nginx-with-cosocket-and-uri-args&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics
+--- response_body_like eval
+[".*PublishResult.*ResponseMetadata.*"]
 --- error_code: 200
 --- no_error_log
 [error]

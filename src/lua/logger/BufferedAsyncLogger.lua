@@ -49,9 +49,14 @@ function AsyncLogger:logMetrics(key, value)
 end
 
 -- Save the data into shared dict
-function AsyncLogger:flushMetrics()
+function AsyncLogger:flushMetrics(location)
     local PostLogs = require "logger.PostLogs"
     local poster =  PostLogs:new()
+
+    if(location ~= nil) then
+        poster:postDataToInternalLocation(location)
+        return
+    end
     poster:postDataToAnalyticsSNS()
 end
 

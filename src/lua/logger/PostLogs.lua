@@ -20,93 +20,70 @@ function PostLogs:postDataToAnalyticsSNS()
 
     local aws_service = ngx.var.aws_service or "sns"
     local aws_region = ngx.var.aws_region or "us-east-1"
-    local host = "https://".. aws_service .. "." .. aws_region .. ".amazonaws.com/"
+    local host =  aws_service .. "." .. aws_region .. ".amazonaws.com"
     local subject = "analytics"
     local sns_topic_arn = ngx.var.analytics_topic_arn or "arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics"
 
-    local request_uri = "/"
+    local request_uri = ngx.var.request_uri
 
-    local request_method = "POST"
+    local request_method = ngx.var.request_method or "POST"
 
       -- get the data from shared dict
     local BufferedAsyncLogger = require "logger.BufferedAsyncLogger"
     local logger = BufferedAsyncLogger:new({
-        flush_length = 2,
+        flush_length = 20,
         sharedDict = "stats_all",
         flushDestination = "/flush-metrics"
     })
     local req_body = logger:getDataFromSharedDict()
 
+    local requestbody = "Action=Publish&Subject=".. subject .. "&TopicArn=" .. sns_topic_arn
+
+    requestbody = requestbody .. "&Message=" .. req_body
+    ngx.log(ngx.INFO, "requestbody ********* \\n " .. requestbody .. "\\n ********* \\n")
+
 
     -- calculate the auth header for posting to aws
     local AWSV4S = require "aws.AwsV4Signature"
-    local awsAuth =  AWSV4S:new( {
+    local awsAuth =  AWSV4S:new({
         aws_region  = ngx.var.aws_region,
         aws_service = ngx.var.aws_service
     })
-    local authHeader = awsAuth:getAuthorizationHeader(
-        ngx.var.request_method,
+
+    local authorization = awsAuth:getAuthorizationHeader( request_method,
         request_uri,
         ngx.req.get_uri_args(),
-        subject,
-        req_body
+        requestbody
     )
-    ngx.log(ngx.INFO, "------authHeader---------")
-    ngx.log(ngx.INFO, authHeader)
-    ngx.log(ngx.INFO, "-------authHeader--------")
+    ngx.log(ngx.INFO, "request_method,request_uri, get_uri_args ********* \\n " .. request_method .."++++".. request_uri .."++++".. tostring(ngx.req.get_uri_args()).."\\n ********* \\n")
 
-    local tcp = ngx.socket.tcp
-    local sock = tcp()
-    sock:settimeout(100000)
+    local http = require "logger.http"
+    local hc = http:new()
 
-    ok, err = sock:connect(host,80)
-    if err then
-        ngx.log(ngx.ERR, "error in connecting to socket" .. err)
-    end
+    ngx.log(ngx.INFO, "host, ********* \\n " .. host .. "\\n ********* \\n")
 
-    local uri = "/?Action=Publish&Message=" .. "hello_from_nginx" .. "&Subject=" .. "nginx" .. "&TopicArn=" .. topicarn
+    local ok, code, headers, status, body  = hc:request {
+        url = request_uri,
+        host = host,
+        body = requestbody,
+        method = request_method,
+        headers = {
+            Authorization = authorization,
+            ["X-Amz-Date"] = awsAuth.aws_date,
+            ["Content-Type"] = "application/x-www-form-urlencoded"
+        }
+    }
+    ngx.say(ok)
+    ngx.say(code)
+    ngx.say(status)
+    ngx.say(body)
 
-    local reqline = "POST "  .. uri .. " HTTP/1.1" .. "\\r\\n"
+
+end
 
 
-    local headers = "Content-Type" .. ":" .. "application/x-www-form-urlencoded; charset=utf-8" .."\\r\\n" ..
-            "X-Amz-Date" .. ":" .. ngx.var.x_amz_date .."\\r\\n" ..
-            "Authorization" .. ":" .. authorization .."\\r\\n" ..
-            "Content-Length" .. ":" .. "15" .. "\\r\\n"
-
-    bytes, err = sock:send(reqline .. headers)
-    if err then
-        ngx.log(ngx.ERR, "error in sending header to socket" .. err)
-        sock:close()
-        return nil, err
-    end
-    ngx.say("------------")
-    ngx.say(bytes)
-    ngx.say("------------")
-
-    local body = "Action=Publish&Message=" .. message .. "&Subject=" .. subject .. "&TopicArn=" .. topicarn
-
-    bytes, err = sock:send(jsonbody)
-    if err then
-        ngx.log(ngx.ERR, "error in sending body to socket" .. err)
-        sock:close()
-        return nil, err
-    end
-    ngx.say("------------")
-    ngx.say(bytes)
-    ngx.say("------------")
-
-    local status_reader = sock:receiveuntil("\\r\\n")
-
-    local data, err, partial = status_reader()
-    if not data then
-        return nil, "read status line failed " .. err
-    end
-
-    local t1, t2, code = string.find(data, "HTTP/%d*%.%d* (%d%d%d)")
-
-    ngx.say(tonumber(code), data)
-
+function PostLogs:postDataToInternalLocation(location)
+    ngx.say("Do we need this function?")
 end
 
 return PostLogs
