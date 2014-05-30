@@ -16,7 +16,7 @@ install: all
 	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/resty/hmac.lua
 	$(INSTALL) src/lua/api-gateway/logger/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/
 	$(INSTALL) src/lua/api-gateway/aws/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/aws/
-	$(INSTALL) src/lua/api-gateway/resty/hmac.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/resty/hmac.lua
+	$(INSTALL) src/lua/api-gateway/resty/hmac.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/resty/
 
 test:
 	echo "running tests ..."
