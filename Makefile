@@ -1,6 +1,5 @@
 # NOTE: Every line in a recipe must begin with a tab character.
 BUILD_DIR ?= target
-REDIS_VERSION ?= 2.8.6
 
 PREFIX ?=          /usr/local
 LUA_INCLUDE_DIR ?= $(PREFIX)/include
@@ -13,7 +12,11 @@ all: ;
 
 install: all
 	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/
-	$(INSTALL) lib/api-gateway/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/
+	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/aws/
+	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/resty/hmac.lua
+	$(INSTALL) src/lua/api-gateway/logger/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/
+	$(INSTALL) src/lua/api-gateway/aws/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/aws/
+	$(INSTALL) src/lua/api-gateway/resty/hmac.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/resty/hmac.lua
 
 test:
 	echo "running tests ..."

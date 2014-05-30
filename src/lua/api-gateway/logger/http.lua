@@ -1,14 +1,20 @@
-module("logger.http", package.seeall)
 
-_VERSION = '0.2'
+-- global variables
+local url = require "api-gateway.logger.url"
+local tcp = ngx.socket.tcp
+local base64 = ngx.encode_base64
 
 -- constants
 -- connection timeout in seconds
 local TIMEOUT = 60
 -- default port for document retrieval
 local PORT = 80
+
+local _M = { _VERSION = '0.2' }
 -- user agent field sent in request
-local USERAGENT = 'logger.http/' .. _VERSION
+local USERAGENT = 'api-gateway.logger.http/' .. _M._VERSION
+
+local mt = { __index = _M }
 
 -- default url parts
 local default = {
@@ -17,15 +23,6 @@ local default = {
     path ="/",
     scheme = "http"
 }
-
-
--- global variables
-local url = require("logger.url")
-
-local mt = { __index = logger.http }
-
-local tcp = ngx.socket.tcp
-local base64 = ngx.encode_base64
 
 
 local function adjusturi(reqt)
@@ -39,7 +36,7 @@ local function adjusturi(reqt)
             fragment = reqt.fragment
         }
     end
-    return url.build(u)
+    return url:build(u)
 end
 
 
@@ -67,7 +64,7 @@ end
 local function adjustproxy(reqt)
     local proxy = reqt.proxy or PROXY
     if proxy then
-        proxy = url.parse(proxy)
+        proxy = url:parse(proxy)
         return proxy.host, proxy.port or 3128
     else
         return reqt.host, reqt.port
@@ -77,7 +74,7 @@ end
 
 local function adjustrequest(reqt)
     -- parse url if provided
-    local nreqt = reqt.url and url.parse(reqt.url, default) or {}
+    local nreqt = reqt.url and url:parse(reqt.url, default) or {}
     -- explicit components override url
     for i,v in pairs(reqt) do nreqt[i] = v end
 
@@ -244,12 +241,11 @@ local function shouldreceivebody(reqt, code)
     return 1
 end
 
-
-function new(self)
+function _M.new(self)
     return setmetatable({}, mt)
 end
 
-function request(self, reqt)
+function _M.request(self, reqt)
     local code, headers, status, body, bytes, ok, err
 
     local nreqt = adjustrequest(reqt)
@@ -382,7 +378,7 @@ function request(self, reqt)
     return 1, code, headers, status, body
 end
 
-function proxy_pass(self, reqt)
+function _M.proxy_pass(self, reqt)
     local nreqt = {}
     for i,v in pairs(reqt) do nreqt[i] = v end
 
@@ -405,11 +401,7 @@ function proxy_pass(self, reqt)
             ngx.print(data) -- Will auto package as chunked format!!
         end
     end
-    return request(self, nreqt)
+    return self:request(self, nreqt)
 end
 
--- to prevent use of casual module global variables
-getmetatable(logger.http).__newindex = function (table, key, val)
-    error('attempt to write to undeclared variable "' .. key .. '": '
-            .. debug.traceback())
-end
+return _M

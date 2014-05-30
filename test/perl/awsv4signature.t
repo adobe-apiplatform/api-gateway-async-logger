@@ -9,7 +9,7 @@ use Cwd qw(cwd);
 
 repeat_each(1);
 
-plan tests => repeat_each() * (blocks() * 4) - 2;
+plan tests => repeat_each() * (blocks() * 4) - 3;
 
 my $pwd = cwd();
 
@@ -36,7 +36,7 @@ __DATA__
         location /test-signature {
 
             content_by_lua '
-                local AWSV4S = require "aws.AwsV4Signature"
+                local AWSV4S = require "api-gateway.aws.AwsV4Signature"
                 local awsAuth =  AWSV4S:new()
                 ngx.print(awsAuth:formatQueryString(ngx.req.get_uri_args()))
             ';
@@ -67,7 +67,7 @@ POST /test-signature?Subject=nginx:test!@$&TopicArn=arn:aws:sns:us-east-1:492299
 
                 local host = ngx.var.aws_service .."." .. ngx.var.aws_region .. ".amazonaws.com"
 
-                local AWSV4S = require "aws.AwsV4Signature"
+                local AWSV4S = require "api-gateway.aws.AwsV4Signature"
                 local awsAuth =  AWSV4S:new({
                                    aws_region  = ngx.var.aws_region,
                                    aws_service = ngx.var.aws_service
@@ -76,7 +76,7 @@ POST /test-signature?Subject=nginx:test!@$&TopicArn=arn:aws:sns:us-east-1:492299
                 local requestbody = "Action=Publish&Subject=HELLO-FROM-POST&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics"
 
                 local msg = "I MAY BE A LONG MESSAGE.YOU HAVE BEEN WARNED"
-                for i=1,60000 do msg = msg .. "abcd" end
+                for i=1,10000 do msg = msg .. "abcdefgh" end
 
                 requestbody = requestbody .. "&Message=" .. msg
 
@@ -85,7 +85,7 @@ POST /test-signature?Subject=nginx:test!@$&TopicArn=arn:aws:sns:us-east-1:492299
                                                                     {}, -- ngx.req.get_uri_args()
                                                                     requestbody)
 
-                local http = require "logger.http"
+                local http = require "api-gateway.logger.http"
                 local hc = http:new()
 
 
@@ -131,7 +131,7 @@ POST /test-signature?Action=Publish&Message=POST-cosocket-is-awesome&Subject=ngi
 
                 local host = ngx.var.aws_service .."." .. ngx.var.aws_region .. ".amazonaws.com"
 
-                local AWSV4S = require "aws.AwsV4Signature"
+                local AWSV4S = require "api-gateway.aws.AwsV4Signature"
                 local awsAuth =  AWSV4S:new({
                                    aws_region  = ngx.var.aws_region,
                                    aws_service = ngx.var.aws_service
@@ -146,7 +146,7 @@ POST /test-signature?Action=Publish&Message=POST-cosocket-is-awesome&Subject=ngi
 
                 local requestbody = awsAuth:formatQueryString(ngx.req.get_uri_args())
 
-                local http = require "logger.http"
+                local http = require "api-gateway.logger.http"
                 local hc = http:new()
 
 

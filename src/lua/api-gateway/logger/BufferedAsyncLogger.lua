@@ -50,7 +50,7 @@ end
 
 -- Save the data into shared dict
 function AsyncLogger:flushMetrics(location)
-    local PostLogs = require "logger.PostLogs"
+    local PostLogs = require "api-gateway.logger.PostLogs"
     local poster =  PostLogs:new()
 
     if(location ~= nil) then

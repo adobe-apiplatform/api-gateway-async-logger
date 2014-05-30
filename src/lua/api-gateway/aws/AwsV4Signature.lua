@@ -8,7 +8,7 @@
 --
 local resty_sha256 = require "resty.sha256"
 local str = require "resty.string"
-local resty_hmac = require "resty.hmac"
+local resty_hmac = require "api-gateway.resty.hmac"
 
 local HmacAuthV4Handler = {}
 

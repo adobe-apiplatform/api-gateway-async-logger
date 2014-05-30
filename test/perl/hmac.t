@@ -23,7 +23,7 @@ __DATA__
 --- config
     location /t {
         content_by_lua '
-            local resty_hmac_sha1 = require "resty.hmac"
+            local resty_hmac_sha1 = require "api-gateway.resty.hmac"
             local hmac_sha1 = resty_hmac_sha1:new()
 
             local digest = hmac_sha1:digest("sha1","secret-key","Hello world")
@@ -47,7 +47,7 @@ hmac_sha1: 0877fcf3af864ddf56157f9f4e39eb48dedd74fd
 --- config
     location /t {
         content_by_lua '
-            local resty_hmac_sha224 = require "resty.hmac"
+            local resty_hmac_sha224 = require "api-gateway.resty.hmac"
             local hmac_sha224 = resty_hmac_sha224:new()
 
             local digest = hmac_sha224:digest("sha224","secret-key","Hello world")
@@ -72,7 +72,7 @@ hmac_sha224: a41ef5660a729abe83238c6921861ddd157a2314df03d98252a9ecac
 --- config
     location /t {
         content_by_lua '
-            local resty_hmac_sha256 = require "resty.hmac"
+            local resty_hmac_sha256 = require "api-gateway.resty.hmac"
             local hmac_sha256 = resty_hmac_sha256:new()
 
             local digest = hmac_sha256:digest("sha256","secret-key","Hello world")
@@ -97,7 +97,7 @@ hmac_sha256: 345fba21f06a4f75ed673fb93dc16cd47d8dc7a69f52e84e3016fcf69835fdb8
 --- config
     location /t {
         content_by_lua '
-            local resty_hmac_sha384 = require "resty.hmac"
+            local resty_hmac_sha384 = require "api-gateway.resty.hmac"
             local hmac_sha384 = resty_hmac_sha384:new()
 
             local digest = hmac_sha384:digest("sha384","secret-key","Hello world")
@@ -123,7 +123,7 @@ hmac_sha384: 3e4c852a0ce874f8bef33bb899b7fa938f5ce8418bafc530e7c2df532b7be4ad49f
 --- config
     location /t {
         content_by_lua '
-            local resty_hmac_sha512 = require "resty.hmac"
+            local resty_hmac_sha512 = require "api-gateway.resty.hmac"
             local hmac_sha512 = resty_hmac_sha512:new()
 
             local digest = hmac_sha512:digest("sha512","secret-key","Hello world")
@@ -147,7 +147,7 @@ hmac_sha512: 1560eeb87551d027de6007027af3faab5f644f8ef96519c4b519531a6620c755b61
 --- config
     location /t {
         content_by_lua '
-            local resty_hmac_sha256 = require "resty.hmac"
+            local resty_hmac_sha256 = require "api-gateway.resty.hmac"
             local hmac_sha256 = resty_hmac_sha256:new()
 
             local digest = hmac_sha256:digest("INVALID_SHA","secret-key","Hello world")
@@ -172,7 +172,7 @@ attempt to use unknown algorithm: 'INVALID_SHA'
 --- config
     location /t {
         content_by_lua '
-            local resty_hmac_sha256 = require "resty.hmac"
+            local resty_hmac_sha256 = require "api-gateway.resty.hmac"
             local hmac_sha256 = resty_hmac_sha256:new()
 
             local digest = hmac_sha256:digest("sha256",nil,"Hello world")
