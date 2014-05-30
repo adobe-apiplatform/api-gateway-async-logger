@@ -87,16 +87,21 @@ function AsyncLogger:getJsonFor( metric_type )
 end
 
 function AsyncLogger:getDataFromSharedDict( flushExpiredMetrics )
-    local values = self:getJsonFor("stats_all")
-    local flush = flushExpiredMetrics or true
+    local MetricsCls = require "api-gateway.core.metrics"
+    local metrics = MetricsCls:new()
+    local req_body = metrics:toJsonForAnalyticsSNS()
+    return req_body
 
-    local headings =  "\'publisher\',".."\'consumer\',".."\'application\',".."\'service\',".."\'region\',".."\'requestMethod\',".."\'status\',".. "\'guid\',"..
-            "\'guid\',".."\'timstamp\',".."\'ipAddress\',".."\'requestPath\'"
-
-    if ( flush == true ) then
-        self:flushExpiredKeys()
-    end
-    return "{\"headings\":[" .. headings .. "],\"values\":[" .. values .. "]}", counterObject, timerObject
+--    local values = self:getJsonFor("stats_all")
+--    local flush = flushExpiredMetrics or true
+--
+--    local headings =  "\'publisher\',".."\'consumer\',".."\'application\',".."\'service\',".."\'region\',".."\'requestMethod\',".."\'status\',".. "\'guid\',"..
+--            "\'guid\',".."\'timstamp\',".."\'ipAddress\',".."\'requestPath\'"
+--
+--    if ( flush == true ) then
+--        self:flushExpiredKeys()
+--    end
+--    return "{\"headings\":[" .. headings .. "],\"values\":[" .. values .. "]}", counterObject, timerObject
 end
 
 function AsyncLogger:flushExpiredKeys()

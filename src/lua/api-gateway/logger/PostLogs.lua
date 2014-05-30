@@ -35,7 +35,11 @@ function PostLogs:postDataToAnalyticsSNS()
         sharedDict = "stats_all",
         flushDestination = "/flush-metrics"
     })
-    local req_body = logger:getDataFromSharedDict()
+--    local req_body = logger:getDataFromSharedDict()
+
+    local MetricsCls = require "api-gateway.core.metrics"
+    local metrics = MetricsCls:new()
+    local req_body = metrics:toJsonForAnalyticsSNS()
 
     local requestbody = "Action=Publish&Subject=".. subject .. "&TopicArn=" .. sns_topic_arn
 
