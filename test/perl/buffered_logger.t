@@ -32,34 +32,34 @@ run_tests();
 
 __DATA__
 
-#=== TEST 1: test that logs are buffered in the given dictionary
-#--- http_config eval: $::HttpConfig
-#--- config
-#        location /t {
-#            content_by_lua '
-#                local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
-#
-#                local logger = BufferedAsyncLogger:new({
-#                    flush_length = 20,
-#                    sharedDict = "stats_all",
-#                    backend = "api-gateway.logger.backend.HttpLogger"
-#                })
-#                logger:logMetrics("1", "value1")
-#                logger:logMetrics(2, "value2")
-#
-#                local dict =  ngx.shared.stats_all
-#                ngx.say( dict:get("1") )
-#                ngx.say( dict:get(2) )
-#            ';
-#        }
-#--- request
-#GET /t
-#--- response_body
-#value1
-#value2
-#--- error_code: 200
-#--- no_error_log
-#[error]
+=== TEST 1: test that logs are buffered in the given dictionary
+--- http_config eval: $::HttpConfig
+--- config
+        location /t {
+            content_by_lua '
+                local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
+
+                local logger = BufferedAsyncLogger:new({
+                    flush_length = 20,
+                    sharedDict = "stats_all",
+                    backend = "api-gateway.logger.backend.HttpLogger"
+                })
+                logger:logMetrics("1", "value1")
+                logger:logMetrics(2, "value2")
+
+                local dict =  ngx.shared.stats_all
+                ngx.say( dict:get("1") )
+                ngx.say( dict:get(2) )
+            ';
+        }
+--- request
+GET /t
+--- response_body
+value1
+value2
+--- error_code: 200
+--- no_error_log
+[error]
 
 === TEST 2: test that logs are flushed
 --- http_config eval: $::HttpConfig

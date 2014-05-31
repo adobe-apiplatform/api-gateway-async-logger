@@ -81,10 +81,10 @@ function AsyncLogger:getLogsFromSharedDict()
         end
     end
 
+    -- TODO: consider exposing the flush_expired method
     allMetrics:flush_expired()
 
     return logs
-
 end
 
 -- Send data to a backend.
