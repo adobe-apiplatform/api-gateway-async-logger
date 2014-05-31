@@ -9,15 +9,27 @@
 -- Class for logging data asynch
 local AsyncLogger = {}
 
+local DEFAULT_BUFFER_LENGTH = 10
+
+local backendInst
+
 function AsyncLogger:new(o)
     o = o or {}
     setmetatable(o, self)
     self.__index = self
+
+    self.flush_length = DEFAULT_BUFFER_LENGTH
+
     if ( o ~= nil) then
         self.flush_length = o.flush_length
         self.logerSharedDict = ngx.shared[o.sharedDict]
-        self.flushDestination = o.flushDestination
+        self.backend = o.backend
+        self.backend_opts = o.backend_opts
+
+        local backendCls = assert(require(o.backend), "please provide a valid backend class name" )
+        backendInst = backendCls:new(self.backend_opts)
     end
+
     return o
 end
 
@@ -33,64 +45,79 @@ function AsyncLogger:logMetrics(key, value)
     end
 
     -- count the number of values in the shared dict and flush when its 600
-    count = self.logerSharedDict:incr("counter", 1)
+    local count = self.logerSharedDict:incr("counter", 1)
     if ( count == nil ) then
         self.logerSharedDict:add("counter", 1)
     end
+
+    -- add the key and value
+    local status = self.logerSharedDict:add(key, value)
 
     -- start flushing the shared dict when the count reaches 600
     if(count == self.flush_length) then
         self:flushMetrics()
     end
 
-    -- add the key and value
-    r = self.logerSharedDict:add(key, value)
-    return r
+    return status
 end
 
--- Save the data into shared dict
-function AsyncLogger:flushMetrics(location)
-    local PostLogs = require "api-gateway.logger.PostLogs"
-    local poster =  PostLogs:new()
+-- returns the buffered logs and clears the dict
+function AsyncLogger:getLogsFromSharedDict()
 
-    if(location ~= nil) then
-        poster:postDataToInternalLocation(location)
-        return
-    end
-    poster:postDataToAnalyticsSNS()
-end
-
-function AsyncLogger:getJsonFor( metric_type )
-    -- convert shared_dict to table
-    local allMetrics = ngx.shared[metric_type]
+ -- convert shared_dict to table
+    local allMetrics = self.logerSharedDict
     if ( allMetrics == nil ) then
         return nil
     end
+    self.logerSharedDict:set("counter", 0)
+    local logs = {}
     local keys = allMetrics:get_keys(self.flush_length)
-    local value
-    local jsonString = ""
+
     for i,metric in pairs(keys) do
         if(metric ~= "counter") then
-            value = allMetrics:get(metric)
             --mark item as expired
+            logs[metric] = allMetrics:get(metric)
             allMetrics:set(metric, 0, 0.001,0)
-            jsonString  = jsonString .. "[" .. value .. "],"
         end
     end
-    --remove the last "," from the jsonString
-    jsonString = string.sub(jsonString, 1, -2)
 
-    -- reset the count of flush counter
-    self.logerSharedDict:set("counter", 0)
+    allMetrics:flush_expired()
 
-    return jsonString
+    return logs
+
 end
 
+-- Send data to a backend.
+function AsyncLogger:flushMetrics()
+    --1. read the data and expire logs
+    local logs = self:getLogsFromSharedDict()
+    --2. call the backend
+     backendInst:sendLogs(logs)
+end
+
+
+
 function AsyncLogger:getDataFromSharedDict( flushExpiredMetrics )
-    local MetricsCls = require "api-gateway.core.metrics"
-    local metrics = MetricsCls:new()
-    local req_body = metrics:toJsonForAnalyticsSNS()
-    return req_body
+
+    --    local value
+    --    local jsonString = ""
+    --    for i,metric in pairs(keys) do
+    --        if(metric ~= "counter") then
+    --            value = allMetrics:get(metric)
+    --            --mark item as expired
+    --            allMetrics:set(metric, 0, 0.001,0)
+    --            jsonString  = jsonString .. "[" .. value .. "],"
+    --        end
+    --    end
+    --    --remove the last "," from the jsonString
+    --    jsonString = string.sub(jsonString, 1, -2)
+
+
+--    local MetricsCls = require "api-gateway.core.metrics"
+--    local metrics = MetricsCls:new()
+--    local req_body = metrics:toJsonForAnalyticsSNS()
+--    return req_body
+
 
 --    local values = self:getJsonFor("stats_all")
 --    local flush = flushExpiredMetrics or true
@@ -102,13 +129,6 @@ function AsyncLogger:getDataFromSharedDict( flushExpiredMetrics )
 --        self:flushExpiredKeys()
 --    end
 --    return "{\"headings\":[" .. headings .. "],\"values\":[" .. values .. "]}", counterObject, timerObject
-end
-
-function AsyncLogger:flushExpiredKeys()
-    local metrics = ngx.shared.stats_all
-    if ( metrics ~= nil ) then
-        metrics:flush_expired()
-    end
 end
 
 return AsyncLogger
