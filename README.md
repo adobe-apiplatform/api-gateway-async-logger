@@ -25,6 +25,11 @@ Test files are located in `test/perl`.
 The other libraries such as `Redis`, `test-nginx` are located in `test/resources/`.
 Other files used when running the test are also located in `test/resources`.
 
+## Build locally
+ ```
+sudo LUA_LIB_DIR=/usr/local/api-gateway/lualib make install
+ ```
+
 To execute the test issue the following command:
  ```
  make test
