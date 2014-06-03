@@ -9,7 +9,7 @@ use Cwd qw(cwd);
 
 repeat_each(1);
 
-plan tests => repeat_each() * (blocks() * 4) - 3;
+plan tests => repeat_each() * (blocks() * 4) - 1;
 
 my $pwd = cwd();
 
@@ -53,6 +53,8 @@ __DATA__
                     backend = "api-gateway.logger.backend.AwsSnsLogger",
                     backend_opts = {
                         aws_region = ngx.var.aws_region,
+                        aws_secret_key = ngx.var.aws_secret_key,
+                        aws_access_key = ngx.var.aws_access_key,
                         sns_topic_arn = ngx.var.analytics_topic_arn,
                         method = "POST" -- NOT USED
                     }
@@ -64,12 +66,13 @@ __DATA__
                 local dict =  ngx.shared.stats_all
                 --ngx.say( dict:get("1") )
                 ngx.say( dict:get(3) )
+                -- give time for the logger to execute
+                ngx.sleep(0.300)
             ';
         }
 --- request
 GET /t
 --- response_body
-value1
 value3
 --- error_code: 200
 --- no_error_log

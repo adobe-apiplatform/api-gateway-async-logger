@@ -70,7 +70,9 @@ POST /test-signature?Subject=nginx:test!@$&TopicArn=arn:aws:sns:us-east-1:492299
                 local AWSV4S = require "api-gateway.aws.AwsV4Signature"
                 local awsAuth =  AWSV4S:new({
                                    aws_region  = ngx.var.aws_region,
-                                   aws_service = ngx.var.aws_service
+                                   aws_service = ngx.var.aws_service,
+                                   aws_secret_key = ngx.var.aws_secret_key,
+                                   aws_access_key = ngx.var.aws_access_key
                               })
 
                 local requestbody = "Action=Publish&Subject=HELLO-FROM-POST&TopicArn=arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics"
@@ -134,7 +136,9 @@ POST /test-signature?Action=Publish&Message=POST-cosocket-is-awesome&Subject=ngi
                 local AWSV4S = require "api-gateway.aws.AwsV4Signature"
                 local awsAuth =  AWSV4S:new({
                                    aws_region  = ngx.var.aws_region,
-                                   aws_service = ngx.var.aws_service
+                                   aws_service = ngx.var.aws_service,
+                                   aws_secret_key = ngx.var.aws_secret_key,
+                                   aws_access_key = ngx.var.aws_access_key
                               })
 
 

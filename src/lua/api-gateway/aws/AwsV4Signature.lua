@@ -19,6 +19,8 @@ function HmacAuthV4Handler:new(o)
     if ( o ~= nil) then
         self.aws_service = o.aws_service
         self.aws_region = o.aws_region
+        self.aws_secret_key = o.aws_secret_key
+        self.aws_access_key = o.aws_access_key
     end
     -- set amazon formatted dates
     local utc = ngx.utctime()
@@ -63,16 +65,16 @@ local function get_hashed_canonical_request(method, uri, querystring, headers, r
 
     hash = hash .. _hash(requestPayload or "")
 
-    ngx.log(ngx.WARN, "Canonical String to Sign is:\n" .. hash)
+    ngx.log(ngx.DEBUG, "Canonical String to Sign is:\n" .. hash)
 
     local final_hash = _hash(hash)
-    ngx.log(ngx.WARN, "Canonical String HASHED is:\n" .. final_hash .. "\n")
+    ngx.log(ngx.DEBUG, "Canonical String HASHED is:\n" .. final_hash .. "\n")
     return final_hash
 end
 
 local function get_string_to_sign(algorithm, request_date, credential_scope, hashed_canonical_request)
     local s = algorithm .. "\n" .. request_date .. "\n" .. credential_scope .. "\n" .. hashed_canonical_request
-    ngx.log(ngx.WARN, "String-to-Sign is:\n" .. s)
+    ngx.log(ngx.DEBUG, "String-to-Sign is:\n" .. s)
     return s
 end
 
@@ -85,7 +87,7 @@ local function get_derived_signing_key(aws_secret_key, date, region, service )
     return kSigning
 end
 
-function urlEncode(inputString)
+local function urlEncode(inputString)
         if (inputString) then
             inputString = string.gsub (inputString, "\n", "\r\n")
             inputString = string.gsub (inputString, "([^%w %-%_%.%~])",
@@ -93,6 +95,19 @@ function urlEncode(inputString)
             inputString = string.gsub (inputString, " ", "+")
         end
         return inputString
+end
+
+local function getTableIterator(uri_args, urlParameterKeys)
+    -- use the keys to get the values out of the uri_args table in alphabetical order
+    local i = 0
+    local keyValueIterator = function ()
+        i = i + 1
+        if urlParameterKeys[i] == nil then
+            return nil
+        end
+        return urlParameterKeys[i], uri_args[urlParameterKeys[i]]
+    end
+    return keyValueIterator
 end
 
 function HmacAuthV4Handler:formatQueryString(uri_args)
@@ -116,27 +131,8 @@ function HmacAuthV4Handler:formatQueryString(uri_args)
     return uri
 end
 
-function getTableIterator(uri_args, urlParameterKeys)
-    ngx.log(ngx.WARN, "I am inside at:" .. tostring(os.time()) )
-
-    -- use the keys to get the values out of the uri_args table in alphabetical order
-    local i = 0
-    local keyValueIterator = function ()
-        i = i + 1
-
-        ngx.log(ngx.WARN, " i=" .. tostring(i))
-
-        if urlParameterKeys[i] == nil then
-            return nil
-        end
-        return urlParameterKeys[i], uri_args[urlParameterKeys[i]]
-    end
-    return keyValueIterator
-end
-
 function HmacAuthV4Handler:getSignature(http_method, request_uri, uri_arg_table, request_payload )
     local uri_args = self:formatQueryString(uri_arg_table)
-    local aws_secret = ngx.var.aws_secret_key
     local utc = ngx.utctime()
     local date1 = self.aws_date_short
     local date2 = self.aws_date
@@ -144,11 +140,9 @@ function HmacAuthV4Handler:getSignature(http_method, request_uri, uri_arg_table,
     local headers = {}
     headers.host = self.aws_service .. "." .. self.aws_region .. ".amazonaws.com"
     headers["x-amz-date"] = date2
-    --headers["content-type"] = "application/x-www-form-urlencoded; charset=utf-8"
-    --headers["content-length"] = 0
 
     -- ensure parameters in query string are in order
-    local sign = _sign( get_derived_signing_key( aws_secret,
+    local sign = _sign( get_derived_signing_key( self.aws_secret_key,
         date1,
         self.aws_region,
         self.aws_service),
@@ -164,8 +158,8 @@ end
 
 function HmacAuthV4Handler:getAuthorizationHeader(http_method, request_uri, uri_arg_table, request_payload )
     local auth_signature = self:getSignature(http_method, request_uri, uri_arg_table, request_payload)
-    local authHeader = "AWS4-HMAC-SHA256 Credential=" .. ngx.var.aws_access_key.."/" .. self.aws_date_short .. "/" .. ngx.var.aws_region
-           .."/" .. ngx.var.aws_service.."/aws4_request,SignedHeaders=host;x-amz-date,Signature="..auth_signature
+    local authHeader = "AWS4-HMAC-SHA256 Credential=" .. self.aws_access_key.."/" .. self.aws_date_short .. "/" .. self.aws_region
+           .."/" .. self.aws_service.."/aws4_request,SignedHeaders=host;x-amz-date,Signature="..auth_signature
     return authHeader
 end
 

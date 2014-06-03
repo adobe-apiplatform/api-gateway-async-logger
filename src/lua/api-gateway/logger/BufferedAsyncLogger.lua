@@ -18,10 +18,8 @@ function AsyncLogger:new(o)
     setmetatable(o, self)
     self.__index = self
 
-    self.flush_length = DEFAULT_BUFFER_LENGTH
-
     if ( o ~= nil) then
-        self.flush_length = o.flush_length
+        self.flush_length = o.flush_length or DEFAULT_BUFFER_LENGTH
         self.logerSharedDict = ngx.shared[o.sharedDict]
         self.backend = o.backend
         self.backend_opts = o.backend_opts
@@ -40,21 +38,24 @@ function AsyncLogger:logMetrics(key, value)
         return nil
     end
     --value = toString(value) or ""
-    if value == "" then -- to exit when nil/zero
+    if tostring(value) == "" or value == nil
+      or tostring(key) == "" or key == nil then -- to exit when nil/zero
+        ngx.log(ngx.WARN, "Could not log metring with key=" .. tostring(key) .. ", value=" .. tostring(value))
         return 0
     end
 
-    -- count the number of values in the shared dict and flush when its 600
+    -- count the number of values in the shared dict and flush when its full
     local count = self.logerSharedDict:incr("counter", 1)
     if ( count == nil ) then
         self.logerSharedDict:add("counter", 1)
+        count = 1
     end
 
     -- add the key and value
     local status = self.logerSharedDict:add(key, value)
 
     -- start flushing the shared dict when the count reaches 600
-    if(count == self.flush_length) then
+    if(count >= self.flush_length) then
         self:flushMetrics()
     end
 
@@ -69,16 +70,27 @@ function AsyncLogger:getLogsFromSharedDict()
     if ( allMetrics == nil ) then
         return nil
     end
-    self.logerSharedDict:set("counter", 0)
     local logs = {}
     local keys = allMetrics:get_keys(self.flush_length)
 
     for i,metric in pairs(keys) do
         if(metric ~= "counter") then
             --mark item as expired
-            logs[metric] = allMetrics:get(metric)
-            allMetrics:set(metric, 0, 0.001,0)
+            local v = allMetrics:get(metric)
+            if ( v ~= -10 ) then
+                logs[metric] = v
+            end
+            allMetrics:set(metric, -10, 0.001,0)
         end
+    end
+
+    local dict_counter = self.logerSharedDict:get("counter")
+    local remaining_count = 0
+    if ( dict_counter > self.flush_length ) then
+        remaining_count = dict_counter - self.flush_length
+    end
+    if ( dict_counter ~= dict_counter ) then
+        self.logerSharedDict:set("counter", remaining_count)
     end
 
     -- TODO: consider exposing the flush_expired method
@@ -87,12 +99,17 @@ function AsyncLogger:getLogsFromSharedDict()
     return logs
 end
 
--- Send data to a backend.
-function AsyncLogger:flushMetrics()
+local function doFlushMetrics(premature, self)
     --1. read the data and expire logs
     local logs = self:getLogsFromSharedDict()
     --2. call the backend
      backendInst:sendLogs(logs)
+end
+
+-- Send data to a backend.
+function AsyncLogger:flushMetrics()
+    -- TODO: check this google group thread to decide whether to pass 'self' as reference or pass other values instead
+    ngx.timer.at(0, doFlushMetrics, self)
 end
 
 

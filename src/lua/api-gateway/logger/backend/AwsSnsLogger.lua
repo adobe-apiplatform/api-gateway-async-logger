@@ -27,7 +27,7 @@ function AwsSnsLogger:sendLogs(logs_table)
     local hc = http:new()
 
     local request_body = self:getRequestBody(logs_table)
-    --ngx.log(ngx.WARN, "HttpLogger BODY" .. request_body .. "!"  )
+    ngx.log(ngx.WARN, "[HttpLogger] Request BODY:" .. request_body .. "!"  )
 
 
     local ok, code, headers, status, body  = hc:request {
@@ -37,7 +37,7 @@ function AwsSnsLogger:sendLogs(logs_table)
         method = "POST",
         headers = self:getRequestHeaders(request_body)
     }
-    ngx.log(ngx.WARN, "RESPONSE BODY:" .. body)
+    ngx.log(ngx.WARN, "[HttpLogger] RESPONSE BODY:" .. body)
     return ok, code, headers, status, body
 end
 
@@ -58,7 +58,9 @@ function AwsSnsLogger:getRequestHeaders(request_body)
 
     local awsAuth =  AWSV4S:new({
         aws_region  = self.aws_region,
-        aws_service = "sns"
+        aws_service = "sns",
+        aws_secret_key = self.aws_secret_key,
+        aws_access_key = self.aws_access_key
     })
 
     local method = "POST"
