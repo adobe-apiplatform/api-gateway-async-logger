@@ -40,7 +40,7 @@ function AsyncLogger:logMetrics(key, value)
     --value = toString(value) or ""
     if tostring(value) == "" or value == nil
       or tostring(key) == "" or key == nil then -- to exit when nil/zero
-        ngx.log(ngx.WARN, "Could not log metring with key=" .. tostring(key) .. ", value=" .. tostring(value))
+        ngx.log(ngx.WARN, "Could not log metric with key=" .. tostring(key) .. ", value=" .. tostring(value))
         return 0
     end
 
@@ -55,6 +55,8 @@ function AsyncLogger:logMetrics(key, value)
     local status = self.logerSharedDict:add(key, value)
 
     -- start flushing the shared dict when the count reaches 600
+    -- TODO: b/c flushing the logs is async, count > self.flush_length would be TRUE for consecutive calls until timer executes
+    -- one idea would be to take into account the pending timers
     if(count >= self.flush_length) then
         self:flushMetrics()
     end
@@ -89,7 +91,7 @@ function AsyncLogger:getLogsFromSharedDict()
     if ( dict_counter > self.flush_length ) then
         remaining_count = dict_counter - self.flush_length
     end
-    if ( dict_counter ~= dict_counter ) then
+    if ( remaining_count ~= dict_counter ) then
         self.logerSharedDict:set("counter", remaining_count)
     end
 
@@ -109,7 +111,7 @@ end
 -- Send data to a backend.
 function AsyncLogger:flushMetrics()
     -- TODO: check this google group thread to decide whether to pass 'self' as reference or pass other values instead
-    ngx.timer.at(0, doFlushMetrics, self)
+    ngx.timer.at(0.002, doFlushMetrics, self)
 end
 
 

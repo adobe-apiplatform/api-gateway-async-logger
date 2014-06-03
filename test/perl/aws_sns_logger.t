@@ -45,10 +45,14 @@ __DATA__
             resolver 10.8.4.247;
 
             content_by_lua '
+                ngx.say("OK")
+            ';
+
+            log_by_lua '
                 local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
 
                 local logger = BufferedAsyncLogger:new({
-                    flush_length = 2,
+                    flush_length = 3,
                     sharedDict = "stats_all",
                     backend = "api-gateway.logger.backend.AwsSnsLogger",
                     backend_opts = {
@@ -62,18 +66,16 @@ __DATA__
                 logger:logMetrics("1", "value1")
                 logger:logMetrics(2, "value2")
                 logger:logMetrics(3, "value3")
-
-                local dict =  ngx.shared.stats_all
-                --ngx.say( dict:get("1") )
-                ngx.say( dict:get(3) )
-                -- give time for the logger to execute
-                ngx.sleep(0.300)
+                logger:logMetrics(4, "value4")
+                logger:logMetrics(5, "value5")
             ';
+
+
         }
 --- request
 GET /t
 --- response_body
-value3
+OK
 --- error_code: 200
 --- no_error_log
 [error]
