@@ -9,7 +9,20 @@
 -- Class for logging data asynch
 local AsyncLogger = {}
 
+-----------------------------------------------------------------------------
+-- The length of the buffer. When the number of logs reaches this number
+-- they will be flushed
+-----------------------------------------------------------------------------
 local DEFAULT_BUFFER_LENGTH = 10
+-----------------------------------------------------------------------------
+-- Specifies how many concurrent background threads to the used to flush data
+-----------------------------------------------------------------------------
+local DEFAULT_CONCURRENCY = 3
+-----------------------------------------------------------------------------
+-- Specifies the amount of time since last flush when the metrics should be
+-- flused, even if the buffer is not full
+-----------------------------------------------------------------------------
+local DEFAULT_FLUSH_INTERVAL = 5
 
 local backendInst
 
@@ -23,6 +36,8 @@ function AsyncLogger:new(o)
         self.logerSharedDict = ngx.shared[o.sharedDict]
         self.backend = o.backend
         self.backend_opts = o.backend_opts
+        self.flush_concurrency = o.flush_concurrency or DEFAULT_CONCURRENCY
+        self.flush_interval = o.flush_interval or DEFAULT_CONCURRENCY
 
         local backendCls = assert(require(o.backend), "please provide a valid backend class name" )
         backendInst = backendCls:new(self.backend_opts)
@@ -76,7 +91,7 @@ function AsyncLogger:getLogsFromSharedDict()
     local keys = allMetrics:get_keys(self.flush_length)
 
     for i,metric in pairs(keys) do
-        if(metric ~= "counter") then
+        if (metric ~= "counter" and metric ~= "pendingTimers") then
             --mark item as expired
             local v = allMetrics:get(metric)
             if ( v ~= -10 ) then
@@ -106,12 +121,26 @@ local function doFlushMetrics(premature, self)
     local logs = self:getLogsFromSharedDict()
     --2. call the backend
      backendInst:sendLogs(logs)
+    --3. decremenet pendingtimers
+    self.logerSharedDict:incr("pendingTimers", -1)
 end
 
 -- Send data to a backend.
 function AsyncLogger:flushMetrics()
-    -- TODO: check this google group thread to decide whether to pass 'self' as reference or pass other values instead
-    ngx.timer.at(0.002, doFlushMetrics, self)
+    local concurrency = self.logerSharedDict:get("pendingTimers")
+    if ( concurrency == nil or concurrency < 0 ) then
+        concurrency = 0
+        self.logerSharedDict:set("pendingTimers",0)
+    end
+    if ( concurrency < self.flush_concurrency) then
+        -- pick a random delay between 10ms to 100ms when to spawn this timer
+        local delay = math.random(10,100)
+        ngx.timer.at(delay/1000, doFlushMetrics, self)
+        self.logerSharedDict:incr("pendingTimers", 1)
+        return true
+    end
+    -- concurrency limit is reached at this point, no more thread is spawn
+    return false
 end
 
 
