@@ -32,7 +32,51 @@ run_tests();
 
 __DATA__
 
-=== TEST 1: test that logs are buffered in the given dictionary
+=== TEST 1: test flush works in a light thread
+--- http_config eval: $::HttpConfig
+--- config
+        location /t {
+
+            content_by_lua '
+                local _M = {}
+                function _M:new(o)
+                    o = o or {}
+                    setmetatable(o, self)
+                    self.__index = self
+                    self.message = "I am being executed via timer"
+                    return o
+                end
+                local function timer_callback(premature, self)
+                    ngx.log(ngx.WARN, self.message)
+                end
+
+                function _M:doSomethingAsync()
+                   ngx.timer.at(0.001, timer_callback, self)
+                end
+
+                local mInst = _M:new()
+                mInst:doSomethingAsync()
+                ngx.say("timer is pending")
+                -- wait for the async to happen
+                ngx.sleep(0.100)
+            ';
+
+
+        }
+--- request
+GET /t
+--- response_body
+timer is pending
+--- error_code: 200
+--- no_error_log
+[error]
+--- grep_error_log eval: qr/I am being executed via timer *?/
+--- grep_error_log_out
+I am being executed via timer
+
+
+
+=== TEST 2: test that logs are buffered in the given dictionary
 --- http_config eval: $::HttpConfig
 --- config
         location /t {
@@ -61,7 +105,7 @@ value2
 --- no_error_log
 [error]
 
-=== TEST 2: test that logs are flushed
+=== TEST 3: test that logs are flushed
 --- http_config eval: $::HttpConfig
 --- config
         location /t {
@@ -106,3 +150,54 @@ OK
 --- grep_error_log eval: qr/TO BE LOGGED: ,value1,value2,*?/
 --- grep_error_log_out
 TO BE LOGGED: ,value1,value2
+
+
+=== TEST 3: test limit of concurrency background threads
+--- http_config eval: $::HttpConfig
+--- config
+        location /t {
+            resolver 10.8.4.247;
+            content_by_lua '
+                local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
+
+                local logger = BufferedAsyncLogger:new({
+                    flush_length = 200,
+                    flush_concurrency = 3,
+                    sharedDict = "stats_all",
+                    backend = "api-gateway.logger.backend.HttpLogger",
+                    backend_opts = {
+                        host = "127.0.0.1",
+                        port = "1989",
+                        url = "/flush-location",
+                        method = "POST"
+                    }
+                })
+                for i=1,500 do
+                   logger:logMetrics(i, "value" .. tostring(i))
+                end
+                local dict =  ngx.shared.stats_all
+                ngx.say( "1. Pending timers left:" .. dict:get("pendingTimers") )
+                ngx.sleep(0.500)
+                ngx.say( "2. Pending timers left:" .. dict:get("pendingTimers") )
+            ';
+        }
+        location /flush-location {
+            lua_need_request_body on;
+            content_by_lua '
+                ngx.log(ngx.WARN, "Flush content: " .. ngx.var.request_body)
+            ';
+        }
+--- request
+GET /t
+--- response_body
+1. Pending timers left:3
+2. Pending timers left:0
+--- error_code: 200
+--- no_error_log
+[error]
+--- grep_error_log eval: qr/Flush content: *?/
+--- grep_error_log_out
+Flush content:
+Flush content:
+Flush content:
+
