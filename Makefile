@@ -12,9 +12,11 @@ all: ;
 
 install: all
 	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/
+	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/backend
 	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/aws/
 	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/resty/
 	$(INSTALL) src/lua/api-gateway/logger/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/
+	$(INSTALL) src/lua/api-gateway/logger/backend/* $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/backend/
 	$(INSTALL) src/lua/api-gateway/aws/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/aws/
 	$(INSTALL) src/lua/api-gateway/resty/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/resty/
 
