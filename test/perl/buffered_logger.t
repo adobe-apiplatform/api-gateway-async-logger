@@ -145,9 +145,9 @@ OK
 --- error_code: 200
 --- no_error_log
 [error]
---- grep_error_log eval: qr/TO BE LOGGED: ,value1,value2,*?/
+--- grep_error_log eval: qr/TO BE LOGGED: value1,value2,*?/
 --- grep_error_log_out
-TO BE LOGGED: ,value1,value2
+TO BE LOGGED: value1,value2
 
 
 === TEST 4: test limit of concurrency background threads
@@ -248,8 +248,8 @@ GET /t
 --- error_code: 200
 --- no_error_log
 [error]
---- grep_error_log eval: qr/Flush content: ,value\d,value\d, *?/
+--- grep_error_log eval: qr/Flush content: value\d,value\d, *?/
 --- grep_error_log_out
-Flush content: ,value1,value3,
-Flush content: ,value4,value5,
+Flush content: value1,value3,
+Flush content: value4,value5,
 
