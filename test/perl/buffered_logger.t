@@ -36,7 +36,6 @@ __DATA__
 --- http_config eval: $::HttpConfig
 --- config
         location /t {
-
             content_by_lua '
                 local _M = {}
                 function _M:new(o)
@@ -109,7 +108,6 @@ value2
 --- http_config eval: $::HttpConfig
 --- config
         location /t {
-            resolver 10.8.4.247;
             content_by_lua '
                 local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
 
@@ -156,7 +154,6 @@ TO BE LOGGED: ,value1,value2
 --- http_config eval: $::HttpConfig
 --- config
         location /t {
-            resolver 10.8.4.247;
             content_by_lua '
                 local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
 
@@ -206,7 +203,6 @@ Flush content:
 --- http_config eval: $::HttpConfig
 --- config
         location /t {
-            resolver 10.8.4.247;
             content_by_lua '
                 local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
 
