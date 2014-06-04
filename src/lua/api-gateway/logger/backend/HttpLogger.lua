@@ -53,6 +53,8 @@ function HttpLogger:getRequestBody(logs_table)
             r  = r .. "," .. value
         end
     end
+    --remove the first "," from r
+    r = string.sub(r, 2)
 
     return r
 end

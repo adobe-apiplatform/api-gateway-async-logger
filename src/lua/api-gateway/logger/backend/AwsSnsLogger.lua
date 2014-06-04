@@ -48,6 +48,8 @@ function AwsSnsLogger:getRequestBody(logs_table)
             r  = r .. "," .. value
         end
     end
+    --remove the first "," from r
+    r = string.sub(r, 2)
 
     local requestbody = "Action=Publish&Subject=AwsSnsLogger&TopicArn=" .. self.sns_topic_arn .. "&Message=" .. r
 
