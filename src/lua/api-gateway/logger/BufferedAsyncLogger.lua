@@ -19,8 +19,8 @@ local DEFAULT_BUFFER_LENGTH = 10
 -----------------------------------------------------------------------------
 local DEFAULT_CONCURRENCY = 3
 -----------------------------------------------------------------------------
--- Specifies the amount of time since last flush when the metrics should be
--- flused, even if the buffer is not full
+-- Specifies the amount of time in seconds since last flush
+-- when the metrics should be flused, even if the buffer is not full
 -----------------------------------------------------------------------------
 local DEFAULT_FLUSH_INTERVAL = 5
 
@@ -69,10 +69,13 @@ function AsyncLogger:logMetrics(key, value)
     -- add the key and value
     local status = self.logerSharedDict:add(key, value)
 
-    -- start flushing the shared dict when the count reaches 600
-    -- TODO: b/c flushing the logs is async, count > self.flush_length would be TRUE for consecutive calls until timer executes
-    -- one idea would be to take into account the pending timers
-    if(count >= self.flush_length) then
+    -- decide if it's time to flush or not
+    local lastFlushTimestamp = self.logerSharedDict:get("lastFlushTimestamp")
+    if ( lastFlushTimestamp == nil) then
+        lastFlushTimestamp = ngx.now()
+        self.logerSharedDict:set("lastFlushTimestamp", lastFlushTimestamp)
+    end
+    if ( count >= self.flush_length or self.flush_interval < (ngx.now() - lastFlushTimestamp) ) then
         self:flushMetrics()
     end
 
@@ -88,14 +91,16 @@ function AsyncLogger:getLogsFromSharedDict()
         return nil
     end
     local logs = {}
+    local logs_c = 0
     local keys = allMetrics:get_keys(self.flush_length)
 
     for i,metric in pairs(keys) do
-        if (metric ~= "counter" and metric ~= "pendingTimers") then
+        if (metric ~= "counter" and metric ~= "pendingTimers" and metric ~= "lastFlushTimestamp") then
             --mark item as expired
             local v = allMetrics:get(metric)
             if ( v ~= -10 ) then
                 logs[metric] = v
+                logs_c = logs_c + 1
             end
             allMetrics:set(metric, -10, 0.001,0)
         end
@@ -113,16 +118,20 @@ function AsyncLogger:getLogsFromSharedDict()
     -- TODO: consider exposing the flush_expired method
     allMetrics:flush_expired()
 
-    return logs
+    return logs, logs_c
 end
 
 local function doFlushMetrics(premature, self)
-    --1. read the data and expire logs
-    local logs = self:getLogsFromSharedDict()
-    --2. call the backend
-     backendInst:sendLogs(logs)
-    --3. decremenet pendingtimers
+    -- read the data and expire logs
+    local logs, number_of_logs = self:getLogsFromSharedDict()
+    if ( number_of_logs > 0 ) then
+        -- call the backend
+        backendInst:sendLogs(logs)
+    end
+    -- decremenet pendingTimers
     self.logerSharedDict:incr("pendingTimers", -1)
+    -- save a timestamp of the last flush
+    self.logerSharedDict:add("lastFlushTimestamp", ngx.now())
 end
 
 -- Send data to a backend.
@@ -143,40 +152,5 @@ function AsyncLogger:flushMetrics()
     return false
 end
 
-
-
-function AsyncLogger:getDataFromSharedDict( flushExpiredMetrics )
-
-    --    local value
-    --    local jsonString = ""
-    --    for i,metric in pairs(keys) do
-    --        if(metric ~= "counter") then
-    --            value = allMetrics:get(metric)
-    --            --mark item as expired
-    --            allMetrics:set(metric, 0, 0.001,0)
-    --            jsonString  = jsonString .. "[" .. value .. "],"
-    --        end
-    --    end
-    --    --remove the last "," from the jsonString
-    --    jsonString = string.sub(jsonString, 1, -2)
-
-
---    local MetricsCls = require "api-gateway.core.metrics"
---    local metrics = MetricsCls:new()
---    local req_body = metrics:toJsonForAnalyticsSNS()
---    return req_body
-
-
---    local values = self:getJsonFor("stats_all")
---    local flush = flushExpiredMetrics or true
---
---    local headings =  "\'publisher\',".."\'consumer\',".."\'application\',".."\'service\',".."\'region\',".."\'requestMethod\',".."\'status\',".. "\'guid\',"..
---            "\'guid\',".."\'timstamp\',".."\'ipAddress\',".."\'requestPath\'"
---
---    if ( flush == true ) then
---        self:flushExpiredKeys()
---    end
---    return "{\"headings\":[" .. headings .. "],\"values\":[" .. values .. "]}", counterObject, timerObject
-end
 
 return AsyncLogger

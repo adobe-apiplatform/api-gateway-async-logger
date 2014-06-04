@@ -152,7 +152,7 @@ OK
 TO BE LOGGED: ,value1,value2
 
 
-=== TEST 3: test limit of concurrency background threads
+=== TEST 4: test limit of concurrency background threads
 --- http_config eval: $::HttpConfig
 --- config
         location /t {
@@ -200,4 +200,60 @@ GET /t
 Flush content:
 Flush content:
 Flush content:
+
+
+=== TEST 5: test data is flushed if the flush_interval is reached, even when the buffer is not full
+--- http_config eval: $::HttpConfig
+--- config
+        location /t {
+            resolver 10.8.4.247;
+            content_by_lua '
+                local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
+
+                local logger = BufferedAsyncLogger:new({
+                    flush_length = 200,
+                    flush_concurrency = 3,
+                    flush_interval = 0.300,
+                    sharedDict = "stats_all",
+                    backend = "api-gateway.logger.backend.HttpLogger",
+                    backend_opts = {
+                        host = "127.0.0.1",
+                        port = "1989",
+                        url = "/flush-location",
+                        method = "POST"
+                    }
+                })
+
+                logger:logMetrics("1", "value1")
+
+                local dict =  ngx.shared.stats_all
+                ngx.say( "1 flush timestamp:" .. tostring(dict:get("lastFlushTimestamp")) )
+                -- wait for some time just to expire flush_interval
+                ngx.sleep(0.400)
+                logger:logMetrics(3, "value3")
+                -- wait for the timer to run
+                ngx.sleep(0.300)
+                ngx.say( "2 flush timestamp:" .. tostring(dict:get("lastFlushTimestamp")) )
+                logger:logMetrics(4, "value4")
+                logger:logMetrics(5, "value5")
+                ngx.sleep(0.100)
+            ';
+        }
+        location /flush-location {
+            lua_need_request_body on;
+            content_by_lua '
+                ngx.log(ngx.WARN, "Flush content: " .. ngx.var.request_body)
+            ';
+        }
+--- request
+GET /t
+--- response_body_like eval
+"1 flush timestamp:\\d+\\.\\d+\n2 flush timestamp:\\d+"
+--- error_code: 200
+--- no_error_log
+[error]
+--- grep_error_log eval: qr/Flush content: ,value\d,value\d, *?/
+--- grep_error_log_out
+Flush content: ,value1,value3,
+Flush content: ,value4,value5,
 

@@ -44,15 +44,15 @@ __DATA__
 
             resolver 10.8.4.247;
 
-            content_by_lua '
-                ngx.say("OK")
-            ';
+            # content_by_lua '
+            #    ngx.say("OK")
+            #';
 
-            log_by_lua '
+            content_by_lua '
                 local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
 
                 local logger = BufferedAsyncLogger:new({
-                    flush_length = 3,
+                    flush_length = 4,
                     sharedDict = "stats_all",
                     backend = "api-gateway.logger.backend.AwsSnsLogger",
                     backend_opts = {
@@ -63,14 +63,17 @@ __DATA__
                         method = "POST" -- NOT USED
                     }
                 })
-                logger:logMetrics("1", "value1")
-                logger:logMetrics(2, "value2")
-                logger:logMetrics(3, "value3")
-                logger:logMetrics(4, "value4")
-                logger:logMetrics(5, "value5")
+                for i=1,9 do
+                   logger:logMetrics(i, "value" .. tostring(i))
+                end
+                -- logger:logMetrics("1", "value1")
+                --logger:logMetrics(2, "value2")
+                --logger:logMetrics(3, "value3")
+                --logger:logMetrics(4, "value4")
+                --logger:logMetrics(5, "value5")
+                ngx.sleep(2)
+                ngx.say("OK")
             ';
-
-
         }
 --- request
 GET /t
@@ -79,3 +82,5 @@ OK
 --- error_code: 200
 --- no_error_log
 [error]
+
+
