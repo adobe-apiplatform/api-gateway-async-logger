@@ -25,6 +25,8 @@ local DEFAULT_CONCURRENCY = 3
 local DEFAULT_FLUSH_INTERVAL = 5
 
 local backendInst
+local awsIAMCredentials = require "api-gateway.aws.AWSIAMCredentials"
+local iamCredentialGenerator
 
 function AsyncLogger:new(o)
     o = o or {}
@@ -42,6 +44,7 @@ function AsyncLogger:new(o)
         local backendCls = assert(require(o.backend), "please provide a valid backend class name" )
         backendInst = backendCls:new(self.backend_opts)
     end
+    iamCredentialGenerator = awsIAMCredentials:new(self.logerSharedDict)
 
     return o
 end
@@ -123,45 +126,26 @@ end
 
 -- Function to handle error from SNS
 local function handleLoggingToSNSFailure(logs,number_of_logs)
-    -- IncompleteSignature/InvalidAction/InvalidParameterCombination/InvalidParameterValue/
-    -- InvalidQueryParameter/MissingAction/MissingParameter/RequestExpired/Throttling/ValidationError
-    if(responseCode == 400) then
+
+    -- 400 : IncompleteSignature/InvalidAction/InvalidParameterCombination/InvalidParameterValue/
+    -- 400 : InvalidQueryParameter/MissingAction/MissingParameter/RequestExpired/Throttling/ValidationError
+    -- 403: InvalidClientTokenId/MissingAuthenticationToken/OptInRequired
+    if(responseCode == 400 or responseCode == 403 ) then
         -- update the credentials
-        local awsIAMCredentials = require "api-gateway.aws.AWSIAMCredentials"
-        awsIAMCredentials:updateSecurityCredentials()
+        iamCredentialGenerator:updateSecurityCredentials()
 
         -- retry sending data with new credentials
         local ok,responseCode = backendInst:sendLogs(logs)
         if(ok == 0) then
-            ngx.log(ngx.ERR, "Alert!! Retried the 400 and failed again. SNS Error - " .. responseCode .. ". No of logs missed logging: " .. number_of_logs .. "!!!")
+            ngx.log(ngx.ERR, "Alert!! Retried the 400 or 403 and failed again. SNS Error - " .. responseCode .. ". No of logs missed logging: " .. number_of_logs .. "!!!")
         end
     end
 
-    -- InvalidClientTokenId/MissingAuthenticationToken/OptInRequired
-    if(responseCode == 403) then
-        -- update the credentials
-        local awsIAMCredentials = require "api-gateway.aws.AWSIAMCredentials"
-        awsIAMCredentials:updateSecurityCredentials()
-
-        -- retry sending data with new credentials
-        local ok,responseCode = backendInst:sendLogs(logs)
-        if(ok == 0) then
-            ngx.log(ngx.ERR, "Alert!! Retried the 403 and failed again. SNS Error - " .. responseCode .. ". No of logs missed logging: " .. number_of_logs .. "!!!")
-        end
+    -- MalformedQueryString - 404 | InternalFailure - 500 | ServiceUnavailable - 503
+    if(responseCode == 404 or responseCode == 500 or responseCode == 503) then
+        ngx.log(ngx.ERR, "Alert!! SNS MalformedQueryString -" .. responseCode .. ". No of logs missed logging: " .. number_of_logs .. "!!!")
     end
 
-    -- MalformedQueryString
-    if(responseCode == 404) then
-        ngx.log(ngx.ERR, "Alert!! SNS MalformedQueryString - 404. No of logs missed logging: " .. number_of_logs .. "!!!")
-    end
-    -- InternalFailure
-    if(responseCode == 500) then
-        ngx.log(ngx.ERR, "Alert!! SNS InternalFailure - 500. No of logs missed logging: " .. number_of_logs .. "!!!")
-    end
-    -- ServiceUnavailable
-    if(responseCode == 503) then
-        ngx.log(ngx.ERR, "Alert!! SNS ServiceUnavailable - 503. No of logs missed logging: " .. number_of_logs .. "!!!")
-    end
 end
 
 
