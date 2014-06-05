@@ -40,8 +40,14 @@ function AwsSnsLogger:initIAM()
     end
 end
 
-function AwsSnsLogger:sendLogs(logs_table)
+function AwsSnsLogger:sendLogs(logs_table, retryFlag)
+    local shouldRetry = retryFlag or false
+
     local hc = http:new()
+
+    if ( shouldRetry == true ) then
+        self.awsIamCredentials:getSecurityCredentials()
+    end
 
     local request_body = self:getRequestBody(logs_table)
     ngx.log(ngx.WARN, "[HttpLogger] Request BODY:" .. request_body .. "!"  )
