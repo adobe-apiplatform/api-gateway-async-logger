@@ -36,8 +36,8 @@ __DATA__
 --- http_config eval: $::HttpConfig
 --- config
         location /t {
-            set $aws_access_key AKIAIBF2BKMFXSCLCR4Q;
-            set $aws_secret_key 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;
+            set $aws_access_key ASIAIT6QKA53TLHC72EA;
+            set $aws_secret_key L8MJ1OcStvq79FEsEfv9mR8qvz5yURwxlPYmg76H;
             set $aws_region "us-east-1";
             set $aws_service "sns";
             set $analytics_topic_arn "arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics";
@@ -50,7 +50,7 @@ __DATA__
 
             content_by_lua '
                 local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
-
+                ngx.say(ngx.now())
                 local logger = BufferedAsyncLogger:new({
                     flush_length = 4,
                     sharedDict = "stats_all",

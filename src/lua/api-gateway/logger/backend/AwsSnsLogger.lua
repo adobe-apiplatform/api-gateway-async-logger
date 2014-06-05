@@ -41,6 +41,16 @@ function AwsSnsLogger:sendLogs(logs_table)
     return ok, code, headers, status, body
 end
 
+local function urlEncode(inputString)
+    if (inputString) then
+        inputString = string.gsub (inputString, "\n", "\r\n")
+        inputString = string.gsub (inputString, "([^%w %-%_%.%~])",
+            function (c) return string.format ("%%%02X", string.byte(c)) end)
+        inputString = string.gsub (inputString, " ", "+")
+    end
+    return inputString
+end
+
 function AwsSnsLogger:getRequestBody(logs_table)
     local r = ""
     for key,value in pairs(logs_table) do
@@ -51,7 +61,14 @@ function AwsSnsLogger:getRequestBody(logs_table)
     --remove the first "," from r
     r = string.sub(r, 2)
 
+    -- Get the security credentials to make use of for sns logging
+    getSecurityCredentials()
+
     local requestbody = "Action=Publish&Subject=AwsSnsLogger&TopicArn=" .. self.sns_topic_arn .. "&Message=" .. r
+
+    local securitytoken  = urlEncode("AQoDYXdzEGYa0AOg6LJSakr+8JW3XfWfHffABrGc112YT31QKMpOz+OAzaaEsDPQvYrZACeSvWO6cl6Xw/cZ8v/D4guzL+TgsxHDAyr/PximPrtyRPb7vRXiDhTYmz5POdbacI1YRPL8idFw0CLMvFG2stA7BYEcEI7IErUwMktwXsOBYsmSTt+QJnDxPF9zm5dp50CPOzdnqV72innxdeUGsBsgqI97vl16hybzUb0RkGUGDXi/8qnvmY0n0izHAyb4X5qLdnNn1DNjGlHM048ikexQWmaBIbFAHu4gsFf1YAuoT4JYxupsQv7PCXTa3t+vQd4Rut67wZnXz+Fnn05RT0ztPJXLZukEOzoYU7erttxZDASGiQu6qDnmiwSgu1LXoaG2zsTM5OJBDJscQmD5KaZeNWsWbiEBC3ZPtXrnN8sNfnRi+3WMIELNcrSzcWI4DFOP6LmNm4/jSS2spBQkkEOzF83IJyxcQhj9k9yqVHjfnl94C8nSLDrsZYye6D4vOsTCma3AF0cJ4ouNwfqme3E+3blMjIGm5TXFBCJoPKGm4BSfzYFfiEX/gBcuvb7KP+xZ6llq0JAUHL9c+sjP0bUtHu7JZDNoqLdVEAWuHPfvHpmlXNbo/yDRkb6cBQ==")
+
+    requestbody = requestbody .. "&SecurityToken=" .. securitytoken
 
     return requestbody
 end
