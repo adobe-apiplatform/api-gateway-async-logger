@@ -25,7 +25,7 @@ function AwsSnsLogger:new(o)
         self.aws_access_key = o.aws_access_key
         self.aws_iam_user = o.aws_iam_user
     end
-    self:initIAM()
+
     return o
 end
 
@@ -45,8 +45,12 @@ function AwsSnsLogger:sendLogs(logs_table, retryFlag)
 
     local hc = http:new()
 
+    if ( self.awsIamCredentials ~= nil and self.aws_iam_token == nil) then
+        self:initIAM()
+    end
+
     if ( shouldRetry == true and self.awsIamCredentials ~= nil ) then
-        self.awsIamCredentials:getSecurityCredentials()
+        self:initIAM()
     end
 
     local request_body = self:getRequestBody(logs_table)
