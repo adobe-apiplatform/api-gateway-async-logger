@@ -47,13 +47,8 @@ Example:
                     method = "POST"
                 }
             })
-            for i=1,500 do
-               logger:logMetrics(i, "value" .. tostring(i))
-            end
-            local dict =  ngx.shared.stats_all
-            ngx.say( "1. Pending timers left:" .. dict:get("pendingTimers") )
-            ngx.sleep(0.500)
-            ngx.say( "2. Pending timers left:" .. dict:get("pendingTimers") )
+            logger:logMetrics("1", "value1")
+            logger:logMetrics(2, "value2")
         ';
     }
     location /flush-location {
