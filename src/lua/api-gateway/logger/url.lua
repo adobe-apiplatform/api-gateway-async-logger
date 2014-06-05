@@ -311,5 +311,16 @@ function _M:build_path(parsed, unsafe)
     return path
 end
 
+function _M:encodeUrl(urltoEncode)
+    local inputString = urltoEncode
+    if (inputString) then
+        inputString = string.gsub (inputString, "\n", "\r\n")
+        inputString = string.gsub (inputString, "([^%w %-%_%.%~])",
+            function (c) return string.format ("%%%02X", string.byte(c)) end)
+        inputString = string.gsub (inputString, " ", "+")
+    end
+    return inputString
+end
+
 return _M
 
