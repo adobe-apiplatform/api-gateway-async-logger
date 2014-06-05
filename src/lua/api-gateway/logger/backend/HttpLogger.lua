@@ -42,7 +42,7 @@ function HttpLogger:sendLogs(logs_table)
         method = self.method,
         headers = self:getRequestHeaders()
     }
-    ngx.log(ngx.WARN, "RESPONSE BODY:" .. body)
+    ngx.log(ngx.DEBUG, "RESPONSE BODY:" .. body)
     return ok, code, headers, status, body
 end
 

@@ -45,16 +45,17 @@ function AwsSnsLogger:sendLogs(logs_table, retryFlag)
 
     local hc = http:new()
 
-    if ( self.awsIamCredentials ~= nil and self.aws_iam_token == nil) then
+    if ( self.awsIamCredentials == nil or self.aws_iam_token == nil or shouldRetry == true) then
         self:initIAM()
     end
 
-    if ( shouldRetry == true and self.awsIamCredentials ~= nil ) then
-        self:initIAM()
-    end
 
     local request_body = self:getRequestBody(logs_table)
-    ngx.log(ngx.WARN, "[HttpLogger] Request BODY:" .. request_body .. "!"  )
+    if ( self.aws_iam_token ~= nil ) then
+        local securitytoken = self.aws_iam_token
+        request_body = request_body .. "&SecurityToken=" .. securitytoken
+    end
+    ngx.log(ngx.DEBUG, "[HttpLogger] Request BODY:" .. request_body .. "!"  )
 
 
     local ok, code, headers, status, body  = hc:request {
@@ -64,7 +65,7 @@ function AwsSnsLogger:sendLogs(logs_table, retryFlag)
         method = "POST",
         headers = self:getRequestHeaders(request_body)
     }
-    ngx.log(ngx.WARN, "[HttpLogger] RESPONSE BODY:" .. body)
+    ngx.log(ngx.DEBUG, "[HttpLogger] RESPONSE BODY:" .. body)
     return ok, code, headers, status, body
 end
 
@@ -79,11 +80,6 @@ function AwsSnsLogger:getRequestBody(logs_table)
     r = string.sub(r, 2)
 
     local requestbody = "Action=Publish&Subject=AwsSnsLogger&TopicArn=" .. self.sns_topic_arn .. "&Message=" .. r
-
-    if ( self.aws_iam_token ~= nil ) then
-        local securitytoken = self.aws_iam_token
-        requestbody = requestbody .. "&SecurityToken=" .. securitytoken
-    end
 
     return requestbody
 end
