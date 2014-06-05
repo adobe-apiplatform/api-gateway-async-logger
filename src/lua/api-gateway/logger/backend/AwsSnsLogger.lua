@@ -45,7 +45,7 @@ function AwsSnsLogger:sendLogs(logs_table, retryFlag)
 
     local hc = http:new()
 
-    if ( shouldRetry == true ) then
+    if ( shouldRetry == true and self.awsIamCredentials ~= nil ) then
         self.awsIamCredentials:getSecurityCredentials()
     end
 

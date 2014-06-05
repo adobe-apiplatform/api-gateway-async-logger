@@ -127,7 +127,7 @@ end
 
 local function handleBackendFailure(backend, logs, number_of_logs)
     local ok, responseCode = backendInst:sendLogs(logs, true)
-    if (ok == 0) then
+    if (responseCode ~= 200) then
         ngx.log(ngx.ERR, "Logging Error ! Backend: [" .. backend .. "] returned:" .. responseCode .. " after retrying.")
     end
 end
@@ -139,8 +139,10 @@ local function doFlushMetrics(premature, self)
     if (number_of_logs > 0) then
         -- call the backend
         local ok, responseCode = backendInst:sendLogs(logs)
+
+
         -- Handling failure cases of sending data to SNS
-        if (ok == 0) then
+        if (responseCode ~= 200) then
             handleBackendFailure(self.backend, logs, number_of_logs)
         end
     end
