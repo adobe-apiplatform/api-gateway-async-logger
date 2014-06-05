@@ -121,12 +121,60 @@ function AsyncLogger:getLogsFromSharedDict()
     return logs, logs_c
 end
 
+-- Function to handle error from SNS
+local function handleLoggingToSNSFailure(logs,number_of_logs)
+    -- IncompleteSignature/InvalidAction/InvalidParameterCombination/InvalidParameterValue/
+    -- InvalidQueryParameter/MissingAction/MissingParameter/RequestExpired/Throttling/ValidationError
+    if(responseCode == 400) then
+        -- update the credentials
+        local awsIAMCredentials = require "api-gateway.aws.AWSIAMCredentials"
+        awsIAMCredentials:updateSecurityCredentials()
+
+        -- retry sending data with new credentials
+        local ok,responseCode = backendInst:sendLogs(logs)
+        if(ok == 0) then
+            ngx.log(ngx.ERR, "Alert!! Retried the 400 and failed again. SNS Error - " .. responseCode .. ". No of logs missed logging: " .. number_of_logs .. "!!!")
+        end
+    end
+
+    -- InvalidClientTokenId/MissingAuthenticationToken/OptInRequired
+    if(responseCode == 403) then
+        -- update the credentials
+        local awsIAMCredentials = require "api-gateway.aws.AWSIAMCredentials"
+        awsIAMCredentials:updateSecurityCredentials()
+
+        -- retry sending data with new credentials
+        local ok,responseCode = backendInst:sendLogs(logs)
+        if(ok == 0) then
+            ngx.log(ngx.ERR, "Alert!! Retried the 403 and failed again. SNS Error - " .. responseCode .. ". No of logs missed logging: " .. number_of_logs .. "!!!")
+        end
+    end
+
+    -- MalformedQueryString
+    if(responseCode == 404) then
+        ngx.log(ngx.ERR, "Alert!! SNS MalformedQueryString - 404. No of logs missed logging: " .. number_of_logs .. "!!!")
+    end
+    -- InternalFailure
+    if(responseCode == 500) then
+        ngx.log(ngx.ERR, "Alert!! SNS InternalFailure - 500. No of logs missed logging: " .. number_of_logs .. "!!!")
+    end
+    -- ServiceUnavailable
+    if(responseCode == 503) then
+        ngx.log(ngx.ERR, "Alert!! SNS ServiceUnavailable - 503. No of logs missed logging: " .. number_of_logs .. "!!!")
+    end
+end
+
+
 local function doFlushMetrics(premature, self)
     -- read the data and expire logs
     local logs, number_of_logs = self:getLogsFromSharedDict()
     if ( number_of_logs > 0 ) then
         -- call the backend
-        backendInst:sendLogs(logs)
+        local ok,responseCode = backendInst:sendLogs(logs)
+        -- Handling failure cases of sending data to SNS
+        if(ok == 0) then
+            handleLoggingToSNSFailure(logs,number_of_logs)
+        end
     end
     -- decremenet pendingTimers
     self.logerSharedDict:incr("pendingTimers", -1)
