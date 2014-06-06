@@ -149,7 +149,7 @@ local function doFlushMetrics(premature, self)
     -- decremenet pendingTimers
     self.logerSharedDict:incr("pendingTimers", -1)
     -- save a timestamp of the last flush
-    self.logerSharedDict:add("lastFlushTimestamp", ngx.now())
+    self.logerSharedDict:set("lastFlushTimestamp", ngx.now())
 end
 
 -- Send data to a backend.
