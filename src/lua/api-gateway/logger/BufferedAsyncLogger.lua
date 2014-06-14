@@ -134,6 +134,11 @@ end
 
 
 local function doFlushMetrics(premature, self)
+    -- decremenet pendingTimers
+    self.logerSharedDict:incr("pendingTimers", -1)
+    -- save a timestamp of the last flush
+    self.logerSharedDict:set("lastFlushTimestamp", ngx.now())
+
     -- read the data and expire logs
     local logs, number_of_logs = self:getLogsFromSharedDict()
     if (number_of_logs > 0) then
@@ -146,10 +151,6 @@ local function doFlushMetrics(premature, self)
             handleBackendFailure(self.backend, logs, number_of_logs)
         end
     end
-    -- decremenet pendingTimers
-    self.logerSharedDict:incr("pendingTimers", -1)
-    -- save a timestamp of the last flush
-    self.logerSharedDict:set("lastFlushTimestamp", ngx.now())
 end
 
 -- Send data to a backend.
