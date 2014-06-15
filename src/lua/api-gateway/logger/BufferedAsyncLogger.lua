@@ -134,7 +134,7 @@ end
 
 
 local function doFlushMetrics(premature, self)
-    ngx.log(ngx.WARN, "Flushing metrics with premature flag:", premature)
+    ngx.log(ngx.DEBUG, "Flushing metrics with premature flag:", premature)
     -- decremenet pendingTimers
     self.logerSharedDict:incr("pendingTimers", -1)
     -- save a timestamp of the last flush
@@ -166,10 +166,10 @@ function AsyncLogger:flushMetrics()
         local delay = math.random(10, 100)
         local ok, err = ngx.timer.at(delay / 1000, doFlushMetrics, self)
         if not ok then
-            ngx.log(ngx.WARN, "Could not flush metrics. Error scheduling the job. Details:", err)
+            ngx.log(ngx.WARN, "Could not schedule the job this time, will retry later. Details: ", err)
             return false
         end
-        ngx.log(ngx.WARN, "Scheduling flushMetrics in " .. tostring(delay) .. "ms." )
+        ngx.log(ngx.DEBUG, "Scheduling flushMetrics in " .. tostring(delay) .. "ms." )
         -- at this point we're certain the timer has started successfully
         self.logerSharedDict:incr("pendingTimers", 1)
         return true
