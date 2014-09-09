@@ -25,8 +25,21 @@ our $HttpConfig = <<_EOC_;
         require "resty.core"
     ';
     init_worker_by_lua '
-        local ZmqLogger = require "api-gateway.zmq.ZeroMQLogger"
-        if not ngx.zmqLogger then
+        local function loadrequire(module)
+            local function requiref(module)
+                require(module)
+            end
+            local res = pcall(requiref,module)
+            if not(res) then
+                ngx.log(ngx.WARN, "Module ", module, " was not found.")
+                return nil
+            end
+            return require(module)
+        end
+        -- when the ZmqModule is not present the script does not break
+        local ZmqLogger = loadrequire("api-gateway.zmq.ZeroMQLogger")
+
+        if (not ngx.zmqLogger ) and ( ZmqLogger ~= nil ) then
             ngx.log(ngx.INFO, "Starting new ZmqLogger on pid ", tostring(ngx.worker.pid()), " ...")
             ngx.zmqLogger = ZmqLogger:new()
             ngx.zmqLogger:connect(ZmqLogger.SOCKET_TYPE.ZMQ_PUB, "ipc:///tmp/xsub")
@@ -46,9 +59,10 @@ __DATA__
 --- config
         location /t {
             content_by_lua '
-                ngx.zmqLogger:log("Ciresica are mere")
-                ngx.zmqLogger:log("Ciresel vine si cere")
-
+                if ( ngx.zmqLogger ) then
+                    ngx.zmqLogger:log("Ciresica are mere")
+                    ngx.zmqLogger:log("Ciresel vine si cere")
+                end
                 ngx.say("Message should be sent")
             ';
         }
