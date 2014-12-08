@@ -32,6 +32,12 @@ function AsyncLogger:new(o)
     self.__index = self
 
     if (o ~= nil) then
+        local s = ""
+        for k,v in pairs(o) do
+            s = s .. ", " .. k .. "=" .. tostring(v)
+        end
+        ngx.log(ngx.DEBUG, "BufferedAsyncLogger(): init object=" .. s)
+
         self.flush_length = o.flush_length or DEFAULT_BUFFER_LENGTH
         self.logerSharedDict = ngx.shared[o.sharedDict]
         self.backend = o.backend
