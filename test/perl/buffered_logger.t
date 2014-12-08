@@ -223,16 +223,20 @@ Flush content:
                 logger:logMetrics("1", "value1")
 
                 local dict =  ngx.shared.stats_all
-                ngx.say( "1 flush timestamp:" .. tostring(dict:get("lastFlushTimestamp")) )
-                -- wait for some time just to expire flush_interval
+                local ts1 = dict:get("lastFlushTimestamp")
+                ngx.say( "1st flush timestamp:" .. tostring(ts1) )
+                -- wait for some time just to expire flush_interval then add a new metric to trigger the push
                 ngx.sleep(0.400)
                 logger:logMetrics(3, "value3")
-                -- wait for the timer to run
+                -- wait for some time again
                 ngx.sleep(0.300)
-                ngx.say( "2 flush timestamp:" .. tostring(dict:get("lastFlushTimestamp")) )
                 logger:logMetrics(4, "value4")
-                logger:logMetrics(5, "value5")
+                -- make sure the flush_interval will expire again then add a new metric
                 ngx.sleep(0.100)
+                local ts2 = dict:get("lastFlushTimestamp")
+                ngx.say( "2nd flush timestamp:" .. tostring(ts2) )
+                logger:logMetrics(5, "value5")
+                assert ( ts2-ts1 < 0.500 and ts2-ts1 > 0.300, "Flush was not triggered correctly")
             ';
         }
         location /flush-location {
@@ -241,10 +245,11 @@ Flush content:
                 ngx.log(ngx.WARN, "Flush content: " .. ngx.var.request_body)
             ';
         }
+--- timeout: 20s
 --- request
 GET /t
 --- response_body_like eval
-"1 flush timestamp:\\d+\\.\\d+\n2 flush timestamp:\\d+"
+"1st flush timestamp:\\d+\\.\\d+\n2nd flush timestamp:\\d+"
 --- error_code: 200
 --- no_error_log
 [error]

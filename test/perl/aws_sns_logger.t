@@ -9,20 +9,43 @@ use Cwd qw(cwd);
 
 repeat_each(1);
 
-plan tests => repeat_each() * (blocks() * 4) - 2;
+plan tests => repeat_each() * (blocks() * 4) - 1;
 
 my $pwd = cwd();
 
+# try to read the nameservers used by the system resolver:
+my @nameservers;
+if (open my $in, "/etc/resolv.conf") {
+    while (<$in>) {
+        if (/^\s*nameserver\s+(\d+(?:\.\d+){3})(?:\s+|$)/) {
+            push @nameservers, $1;
+            if (@nameservers > 10) {
+                last;
+            }
+        }
+    }
+    close $in;
+}
+
+if (!@nameservers) {
+    # default to Google's open DNS servers
+    push @nameservers, "8.8.8.8", "8.8.4.4";
+}
+
+
+warn "Using nameservers: \n@nameservers\n";
+
 our $HttpConfig = <<_EOC_;
     # lua_package_path "$pwd/scripts/?.lua;;";
-    lua_shared_dict stats_all 20m;
-    lua_package_path 'src/lua/?.lua;;';
+    lua_shared_dict stats_all 1m;
+    lua_package_path 'src/lua/?.lua;/usr/local/lib/lua/?.lua;;';
     lua_package_cpath 'src/lua/?.so;;';
     init_by_lua '
         local v = require "jit.v"
         v.on("$Test::Nginx::Util::ErrLogFile")
         require "resty.core"
     ';
+    resolver @nameservers;
 _EOC_
 
 
@@ -41,12 +64,6 @@ __DATA__
             set $aws_region "us-east-1";
             set $aws_service "sns";
             set $analytics_topic_arn "arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics";
-
-            resolver 10.8.4.247;
-
-            # content_by_lua '
-            #    ngx.say("OK")
-            #';
 
             content_by_lua '
                 local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
@@ -76,34 +93,30 @@ OK
 --- error_code: 200
 --- no_error_log
 [error]
+--- more_headers
+X-Test: test
 
-
+#
+# The following test is commented for now as it requires IAM Credentials and you need to get new ones when you want to run the test
+#
 #=== TEST 2: test that logs are sent to SNS with IAM user
 #--- http_config eval: $::HttpConfig
 #--- config
-#        location /get-iam-credentials/test {
+#        location = /latest/meta-data/iam/security-credentials/test {
 #            return 200 '{ "Code" : "Success",
 #                "LastUpdated" : "2014-06-04T20:59:45Z",
 #                "Type" : "AWS-HMAC",
-#                "AccessKeyId" : "ASIAI7ZTCN2NTZYMCSZA",
-#                "SecretAccessKey" : "tcAi+9LoSY+RGLDrHQawI3muBUmDW91WNEDDPhUJ",
-#                "Token" : "AQoDYXdzEGsa0AMwUApb2kR/0gLPF4wCajyGVfRqV1DRda0Uip7hIjjkqQdZ7FUOVSlcGw07asGbtbSrGw6+dAiLzZabYUOiPCTbkF4hPknxRh62OwIIvUy6Dqpua09E3s7BJTUdER7piesId5Lr3bX/qsAk19vmPd9kEiKahojIVGkt29bF448uUF8bZTc7+Du3a+cmWkRidnQuTdYysCpz5imUKPJSvUDLICLOHIu1re/chrQGMre2Bw+nsrxjehKiDy7WNyl4o2jW+QFZDD0ET5bKpK7qW9N1aJlzDyUazrYvpn+8cExBTGE00vs9pMPNyN9zzYyZO0jbSt+pY/YZD0Nj7B+pAQWUoLqu5KlVcsC9vT+5MD5eOt5X5KcEdqGk2U2dAjHjNSLVF9cETUnRf0RVJyvxyFtYj1NWS5W0VMQ/CLoc3vz761aAwkO+kebYJxbogZGiy5q1Q1N4LbqrxxzMM1bKYxGf+yDWu58RqVR94b2tKC5tuAaw+Zk09oaHLc65Qqs4Blz/JOXU1g8cPYSqvAmi4roS6Gd10x5ZdDBJmJhyo85qBekX2XgfpcAduXBmGZM84xRbGqp4SRhWo3MiPbrWeFR1rdQg95GhnyHnoVUbkOAB0CDjp7+cBQ==",
+#                "AccessKeyId" : "ASIAITJJEWHZDNKMRXRA",
+#                "SecretAccessKey" : "hC5BU1kTFJcYpmpThvGn/he9zY7ZVMQrJ/Ittsjm",
+#                "Token" : "AQoDYXdzEPX//////////wEa4AM198qcWT7bcpGsLC1Yzbi/qUxXPi6GUtUIDLug9ONSzC5YVazCwRj7s3lydZKjebl0581RnmWndcX6tzhFtHuJoUBNqlZVxxI+SsWMY5jpOkF7xNJtp2aD92BlXxBVpmNpkRH/zWsaF05KfW5q02qJv8Vyr96Bh4NWBlcAZdxX/jOqbQEgW9bsW2hfTrA4y6/TCEZS2rd8cHI5NhZXZJfxzAbL+CUvsLGLGBNMz+j24tFP/wIogrf/lvZLuWVOKZi3/l5+NtyGpbDJMdv1sj0ynDlEYrtz2P4DGsH0JO3fVVy7C+vrmEKihFOBhh6N0TUKLR8VGzk+r6fm+jxDgtVKRYqIhGyLSWHbU8F9vOxo5BMmYnaiVscAeF/NbmtEu+wkscbErUHbrbORi/12wYmQbDANPc29HXFLEMrQywE5Vyyy5YE3eJgL1sn1RA9ejGshoZ43K1grok+wE/yyF/nRUepQEU8A4zZ39UMsNPXGkaEjfvKBVWx0/BxaZywL6HBEzAyR6uwGA6uIWZ4dx5+vx8aGLLitNtKzoait+B6BSWAmzvUrIy8pRKBoi4EqgdTs2gs1kVeIJf35B/CMO3Vidu/NGKgDmVme1hmnhZj+g9bBLc1Ag32gMpLtuCLbKgUgp9aSpAU=",
 #                "Expiration" : "2014-06-05T03:17:46Z" }';
 #        }
 #
 #        location /t {
-#            set $aws_access_key ASIAIT6QKA53TLHC72EA;
-#            set $aws_secret_key L8MJ1OcStvq79FEsEfv9mR8qvz5yURwxlPYmg76H;
 #            set $aws_region "us-east-1";
 #            set $aws_service "sns";
-#            set $analytics_topic_arn "arn:aws:sns:us-east-1:492299007544:apiplatform-dev-ue1-topic-analytics";
+#            set $analytics_topic_arn "arn:aws:sns:us-east-1:889681731264:apip-stage-ue1-topic-analytics";
 #            set $aws_iam_user "test";
-#
-#            resolver 10.8.4.247;
-#
-#            # content_by_lua '
-#            #    ngx.say("OK")
-#            #';
 #
 #            content_by_lua '
 #                local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
@@ -118,9 +131,8 @@ OK
 #                            -- optional URL, will default to AWS default URL
 #                            security_credentials_host = "127.0.0.1",
 #                            security_credentials_port = "1989",
-#                            security_credentials_url = "/get-iam-credentials/",
 #                            security_credentials_timeout = 15,
-#                            sharedDict = "stats_all",
+#                            shared_cache_dict = "stats_all"
 #                        },
 #                        sns_topic_arn = ngx.var.analytics_topic_arn,
 #                        method = "POST" -- NOT USED
