@@ -32,6 +32,12 @@ function AsyncLogger:new(o)
     self.__index = self
 
     if (o ~= nil) then
+        local s = ""
+        for k,v in pairs(o) do
+            s = s .. ", " .. k .. "=" .. tostring(v)
+        end
+        ngx.log(ngx.DEBUG, "BufferedAsyncLogger(): init object=" .. s)
+
         self.flush_length = o.flush_length or DEFAULT_BUFFER_LENGTH
         self.logerSharedDict = ngx.shared[o.sharedDict]
         self.backend = o.backend
@@ -59,6 +65,8 @@ function AsyncLogger:logMetrics(key, value)
         return 0
     end
 
+    ngx.log(ngx.DEBUG, "adding new metric. key=", tostring(key), ", value=", tostring(value))
+
     -- count the number of values in the shared dict and flush when its full
     local count = self.logerSharedDict:incr("counter", 1)
     if (count == nil) then
@@ -75,8 +83,20 @@ function AsyncLogger:logMetrics(key, value)
         lastFlushTimestamp = ngx.now()
         self.logerSharedDict:set("lastFlushTimestamp", lastFlushTimestamp)
     end
-    if (count >= self.flush_length or self.flush_interval < (ngx.now() - lastFlushTimestamp)) then
+
+    local is_buffer_full = (count >= self.flush_length)
+    local time_since_last_flush = (ngx.now() - lastFlushTimestamp)
+    local is_flush_interval_expired = (self.flush_interval < time_since_last_flush)
+
+    if (is_buffer_full or is_flush_interval_expired) then
+        ngx.log(ngx.DEBUG, "Flushing metrics. is_buffer_full=", tostring(is_buffer_full),
+            " , is_flush_interval_expired=", tostring(is_flush_interval_expired),
+            " , time_since_last_flush=", tostring(time_since_last_flush))
         self:flushMetrics()
+    else
+        ngx.log(ngx.DEBUG, "Metrics not flushed. is_buffer_full=", tostring(is_buffer_full),
+            " , is_flush_interval_expired=", tostring(is_flush_interval_expired),
+            " , time_since_last_flush=", tostring(time_since_last_flush))
     end
 
     return status
@@ -99,7 +119,9 @@ function AsyncLogger:getLogsFromSharedDict()
                 and metric ~= "lastFlushTimestamp"
                 and metric ~= "AccessKeyId"
                 and metric ~= "SecretAccessKey"
-                and metric ~= "Token") then
+                and metric ~= "Token"
+                and metric ~= "ExpireAt"
+                and metric ~= "ExpireAtTimestamp") then
             --mark item as expired
             local v = allMetrics:get(metric)
             if (v ~= -10) then
@@ -169,7 +191,7 @@ function AsyncLogger:flushMetrics()
             ngx.log(ngx.WARN, "Could not schedule the job this time, will retry later. Details: ", err)
             return false
         end
-        ngx.log(ngx.DEBUG, "Scheduling flushMetrics in " .. tostring(delay) .. "ms." )
+        ngx.log(ngx.DEBUG, "Scheduling flushMetrics in " .. tostring(delay) .. "ms.")
         -- at this point we're certain the timer has started successfully
         self.logerSharedDict:incr("pendingTimers", 1)
         return true
