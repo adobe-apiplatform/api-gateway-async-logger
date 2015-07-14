@@ -24,7 +24,6 @@ local DEFAULT_CONCURRENCY = 3
 -----------------------------------------------------------------------------
 local DEFAULT_FLUSH_INTERVAL = 5
 
-local backendInst
 
 function AsyncLogger:new(o)
     o = o or {}
@@ -38,16 +37,16 @@ function AsyncLogger:new(o)
         end
         ngx.log(ngx.DEBUG, "BufferedAsyncLogger(): init object=" .. s)
 
-        self.flush_length = o.flush_length or DEFAULT_BUFFER_LENGTH
-        self.logerSharedDict = ngx.shared[o.sharedDict]
-        self.backend = o.backend
-        self.backend_opts = o.backend_opts
-        self.flush_concurrency = o.flush_concurrency or DEFAULT_CONCURRENCY
-        self.flush_interval = o.flush_interval or DEFAULT_CONCURRENCY
+        o.flush_length = o.flush_length or DEFAULT_BUFFER_LENGTH
+        o.logerSharedDict = ngx.shared[o.sharedDict]
+        o.flush_concurrency = o.flush_concurrency or DEFAULT_CONCURRENCY
+        o.flush_interval = o.flush_interval or DEFAULT_CONCURRENCY
 
         local backendCls = assert(require(o.backend), "please provide a valid backend class name")
-        backendInst = backendCls:new(self.backend_opts)
+        o.backendInst = backendCls:new(o.backend_opts)
     end
+
+    ngx.log(ngx.DEBUG, "Initialized new async logger with backend ", tostring(o.backend), " instance:", tostring(o.backendInst))
 
     return o
 end
@@ -55,7 +54,7 @@ end
 -- Save the data into shared dict
 function AsyncLogger:logMetrics(key, value)
     if (self.logerSharedDict == nil) then
-        ngx.log(ngx.ERR, "Please define 'lua_shared_dict stats_all 50m;' in http block")
+        ngx.log(ngx.ERR, "Please define 'lua_shared_dict ", tostring(self.sharedDict), " 50m;' in http block")
         return nil
     end
     --value = toString(value) or ""
@@ -147,16 +146,24 @@ function AsyncLogger:getLogsFromSharedDict()
     return logs, logs_c
 end
 
-local function handleBackendFailure(backend, logs, number_of_logs)
+local function handleBackendFailure(backend, backendInst, logs, number_of_logs)
     local ok, responseCode = backendInst:sendLogs(logs, true)
     if (responseCode ~= 200) then
         ngx.log(ngx.ERR, "Logging Error ! Backend: [" .. backend .. "] returned:" .. responseCode .. " after retrying.")
     end
 end
 
+local function tableToString(table_ref)
+    local s = ""
+    local o = table_ref or {}
+    for k, v in pairs(o) do
+        s = s .. ", " .. k .. "=" .. tostring(v)
+    end
+    return s
+end
 
 local function doFlushMetrics(premature, self)
-    ngx.log(ngx.DEBUG, "Flushing metrics with premature flag:", premature)
+    ngx.log(ngx.DEBUG, "Flushing metrics with premature flag:", premature, " to backend:", tostring(self.backend), " self=", tostring(tableToString(self)) )
     -- decremenet pendingTimers
     self.logerSharedDict:incr("pendingTimers", -1)
     -- save a timestamp of the last flush
@@ -166,14 +173,16 @@ local function doFlushMetrics(premature, self)
     local logs, number_of_logs = self:getLogsFromSharedDict()
     if (number_of_logs > 0) then
         -- call the backend
-        local ok, responseCode = backendInst:sendLogs(logs)
+        local ok, responseCode = self.backendInst:sendLogs(logs)
 
 
         -- Handling failure cases of sending data to SNS
         if (responseCode ~= 200) then
-            handleBackendFailure(self.backend, logs, number_of_logs)
+            handleBackendFailure(self.backend, self.backendInst, logs, number_of_logs)
         end
+        return
     end
+    ngx.log(ngx.WARN, "Could not flush metrics to backend ", tostring(self.backend) , " number_of_logs=", tostring(number_of_logs) )
 end
 
 -- Send data to a backend.
