@@ -58,10 +58,15 @@ function _M:sendLogs(logs_table)
 
     if (response ~= nil) then
         ngx.log(ngx.DEBUG, "Logs have been sent to Kinesis. FailedRecordCount:", tostring(response.FailedRecordCount))
+
+        if ( response.FailedRecordCount > 0 ) then
+            ngx.log(ngx.WARN, "Some logs were not sent to Kinesis. FailedRecordCount:", tostring(response.FailedRecordCount), " , Kinesis response:", tostring(body))
+        end
+
     end
 
-    if (response ~= nil and response.FailedRecordCount > 0) then
-        ngx.log(ngx.WARN, "Some logs were not sent to Kinesis. FailedRecordCount:", tostring(response.FailedRecordCount))
+    if (code ~= 200 ) then
+        ngx.log(ngx.WARN, "Logs were not sent to Kinesis. AWS Response:", tostring(code), " body:", tostring(body))
     end
 
     return response, code, headers, status, body
