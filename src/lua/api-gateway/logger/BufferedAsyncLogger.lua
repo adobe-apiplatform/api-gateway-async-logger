@@ -1,3 +1,19 @@
+--[[
+  Copyright (c) 2016. Adobe Systems Incorporated. All rights reserved.
+
+    This file is licensed to you under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is
+    distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR RESPRESENTATIONS OF ANY KIND,
+    either express or implied.  See the License for the specific language governing permissions and
+    limitations under the License.
+
+  ]]
+
 --
 -- Created by IntelliJ IDEA.
 -- User: ddascal
@@ -15,12 +31,12 @@ local AsyncLogger = {}
 -----------------------------------------------------------------------------
 local DEFAULT_BUFFER_LENGTH = 10
 -----------------------------------------------------------------------------
--- Specifies how many concurrent background threads to the used to flush data
+-- Specifies how many concurrent background threads to use to flush data
 -----------------------------------------------------------------------------
 local DEFAULT_CONCURRENCY = 3
 -----------------------------------------------------------------------------
--- Specifies the amount of time in seconds since last flush
--- when the metrics should be flused, even if the buffer is not full
+-- Specifies the maximum time in seconds since last flush
+-- after which the metrics would be flushed out regardless if the buffer is not full
 -----------------------------------------------------------------------------
 local DEFAULT_FLUSH_INTERVAL = 5
 
@@ -60,7 +76,7 @@ function AsyncLogger:logMetrics(key, value)
     --value = toString(value) or ""
     if tostring(value) == "" or value == nil
             or tostring(key) == "" or key == nil then -- to exit when nil/zero
-        ngx.log(ngx.WARN, "Could not log metric with key=" .. tostring(key) .. ", value=" .. tostring(value))
+        ngx.log(ngx.ERR, "Could not log metric with key=" .. tostring(key) .. ", value=" .. tostring(value))
         return 0
     end
 
@@ -123,11 +139,9 @@ function AsyncLogger:getLogsFromSharedDict()
                 and metric ~= "ExpireAtTimestamp") then
             --mark item as expired
             local v = allMetrics:get(metric)
-            if (v ~= -10) then
-                logs[metric] = v
-                logs_c = logs_c + 1
-            end
-            allMetrics:set(metric, -10, 0.001, 0)
+            logs[metric] = v
+            logs_c = logs_c + 1
+            allMetrics:delete(metric)
         end
     end
 
@@ -144,13 +158,6 @@ function AsyncLogger:getLogsFromSharedDict()
     allMetrics:flush_expired()
 
     return logs, logs_c
-end
-
-local function handleBackendFailure(backend, backendInst, logs, number_of_logs)
-    local ok, responseCode = backendInst:sendLogs(logs, true)
-    if (responseCode ~= 200) then
-        ngx.log(ngx.ERR, "Logging Error ! Backend: [" .. backend .. "] returned:" .. responseCode .. " after retrying.")
-    end
 end
 
 local function tableToString(table_ref)
@@ -173,13 +180,33 @@ local function doFlushMetrics(premature, self)
     local logs, number_of_logs = self:getLogsFromSharedDict()
     if (number_of_logs > 0) then
         -- call the backend
-        local ok, responseCode = self.backendInst:sendLogs(logs)
+        local ok, responseCode, headers, status, body, failedRecords = self.backendInst:sendLogs(logs)
 
-
-        -- Handling failure cases of sending data to SNS
+        -- Handling failure cases
+        -- 1. Check if the backend responded OK
         if (responseCode ~= 200) then
-            handleBackendFailure(self.backend, self.backendInst, logs, number_of_logs)
+            ngx.log(ngx.ERR, "Failed to send ", tostring(number_of_logs), " logs to the backend. Saving them for later in the shared dict ...")
+            -- add metrics back
+            for k,v in pairs(logs) do
+                -- add each metric back into the dict
+                self:logMetrics(k,v)
+            end
         end
+
+        -- 2. Check if the backend rejected some logs ( this could be due to rate limits )
+        --    in this case it's the backend's resposibility to return which logs have failed
+        local logsToResendCounter = 0
+        if (failedRecords ~= nil) then
+            for k,v in pairs(failedRecords) do
+                -- add each metric back into the dict
+                self:logMetrics(k,v)
+                logsToResendCounter = logsToResendCounter + 1
+            end
+        end
+        if (logsToResendCounter > 0) then
+            ngx.log(ngx.ERR, "Failed to send all ", tostring(number_of_logs), " logs. Resending: ", tostring(logsToResendCounter) " logs again.")
+        end
+
         return
     end
     ngx.log(ngx.WARN, "Could not flush metrics to backend ", tostring(self.backend) , " number_of_logs=", tostring(number_of_logs) )
@@ -197,7 +224,7 @@ function AsyncLogger:flushMetrics()
         local delay = math.random(10, 100)
         local ok, err = ngx.timer.at(delay / 1000, doFlushMetrics, self)
         if not ok then
-            ngx.log(ngx.WARN, "Could not schedule the job this time, will retry later. Details: ", err)
+            ngx.log(ngx.ERR, "Could not flushMetrics this time, will retry later. Details: ", err)
             return false
         end
         ngx.log(ngx.DEBUG, "Scheduling flushMetrics in " .. tostring(delay) .. "ms.")
