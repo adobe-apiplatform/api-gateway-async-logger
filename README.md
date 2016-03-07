@@ -3,28 +3,35 @@ api-gateway-logger
 
 Performant async logger.
 
-
-Loggers
-=======
-
 BufferedAsyncLogger
--------------------
-Sends an aggregated set of logs to a backend system.
+=====================
+Lua module to send logs in batches to a backend system.
 The logs are sent when one of the following criteria is met:
 
- * a configurable max buffer size ( `flush_buffer` ) is reached . Default value is 10.
- * a configurable time interval has elapsed ( `flush_interval` ). Default value is 5 seconds.
- * the number of concurrent background threads sending log data is not reached. By default there can be 3 concurrent background threads.
+ * the buffer is full ( `flush_buffer` property) . Default value is 10 logs.
+ * it's been more than `flush_interval` seconds since the last flush. Default value is 5 seconds.
+ * there are available threads to send logs ( `flush_concurrency` property ). Default value is 3 concurrent threads.
+ 
+So by default the logger sends up to `30` logs simultaneously. 
 
-The BufferedAsyncLogger flushes data asynchronously and non-blocking to a configured backend system.
-It uses Lua's cosoket API to send data to an HTTP backend.
+### Performance
+The `BufferedAsyncLogger` modules flushes data asynchronously and non-blocking to a configured backend system.
 Data is sent asynchronously using `ngx.timer.at` API which schedules a background non-blocking light thread.
 This thread is completely decoupled from the main request.
 
-Depending on the backend you can configure more concurrent threads flush logs.
-Each thread is occupying a worker connection so make sure to configure nginx with enough worker connections.
+Depending on the backend you can configure more concurrent threads to flush logs.
 
-Example:
+> NOTE: Each thread is using a worker connection so make sure to configure nginx with enough worker connections.
+
+Logs could be flushed in parallel in these threads, one batch per thread. 
+I.e. if `flush_concurrency` is 10 and `flush_buffer` is 400, this means that 4000 logs can be sent simultaneously to the backend. 
+
+### Failover
+When the backend returns a response code other than `200` all the logs are resent with the next flush.
+If the backend returns `200` but only some logs have failed, the list with failed logs are resent with the next flush.
+It is up to the backend to return the list with failed logs back.
+
+### Example:
 
 ``` nginx
 
