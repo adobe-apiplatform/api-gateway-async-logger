@@ -15,29 +15,31 @@
   ]]
 
 --
--- Created by IntelliJ IDEA.
+-- A Lua module to be used for logging data asynchronously.
+-- The module buffers data into a shared dictionary to persist it when nginx reloads.
+-- When the buffer is full or when the flush interval expires, logs are sent to the backend.
+--
+-- This module allows you to bring your own backend implementation, passed as "backend" parameter to the init object.
+--  The only method that the backend needs to implement is `sendLogs(logs)`
+--
 -- User: ddascal
 -- Date: 15/05/14
--- Time: 15:08
--- To change this template use File | Settings | File Templates.
 --
 
--- Class for logging data asynch
+--
 local AsyncLogger = {}
 
------------------------------------------------------------------------------
+---
 -- The length of the buffer. When the number of logs reaches this number
 -- they will be flushed
------------------------------------------------------------------------------
 local DEFAULT_BUFFER_LENGTH = 10
------------------------------------------------------------------------------
+---
 -- Specifies how many concurrent background threads to use to flush data
------------------------------------------------------------------------------
 local DEFAULT_CONCURRENCY = 3
------------------------------------------------------------------------------
+
+---
 -- Specifies the maximum time in seconds since last flush
 -- after which the metrics would be flushed out regardless if the buffer is not full
------------------------------------------------------------------------------
 local DEFAULT_FLUSH_INTERVAL = 5
 
 
@@ -204,7 +206,7 @@ local function doFlushMetrics(premature, self)
             end
         end
         if (logsToResendCounter > 0) then
-            ngx.log(ngx.ERR, "Failed to send all ", tostring(number_of_logs), " logs. Resending: ", tostring(logsToResendCounter) " logs again.")
+            ngx.log(ngx.ERR, "Resending: ", tostring(logsToResendCounter), " out of " , tostring(number_of_logs) , " logs again.")
         end
 
         return

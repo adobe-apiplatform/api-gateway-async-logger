@@ -81,19 +81,17 @@ function _M:sendLogs(logs_table)
 
         if ( response.FailedRecordCount > 0 ) then
             --local b = ngx.re.gsub(tostring(body), "com\.amazonaws\.kinesis\.v20131202\.[^\s]+,", "", "ijo")
-            ngx.log(ngx.ERR, "Some logs were not sent to Kinesis. FailedRecordCount:", tostring(response.FailedRecordCount))
-            -- TODO: return the failed logs too
-
+            ngx.log(ngx.WARN, "Some logs were not sent to Kinesis. FailedRecordCount:", tostring(response.FailedRecordCount))
             -- response.Records may be an array with elements like
             -- [{"ErrorCode":"ProvisionedThroughputExceededException","ErrorMessage":"Rate exceeded for shard shardId-000000000"},{..}, ...]
-            -- ASSUMPTION: the index of the failed record matches the index in the request
+            -- ASSUMPTION: the index of the failed record matches the index in the paylod sent to Kinesis
             local partitionKey
             local recordData
             failedRecords = {}
             for i, kinesisRecordResponse in ipairs(response.Records) do
                 if (kinesisRecordResponse ~= nil and kinesisRecordResponse.ErrorCode ~= nil
                         and records ~= nil and records[i] ~= nil) then
-                    -- records need to be base64 decoded in order to be sent back
+                    -- records need to be base64 decoded
                     partitionKey = records[i].PartitionKey
                     recordData = ngx.decode_base64(tostring(records[i].Data))
                     failedRecords[partitionKey] = recordData
@@ -103,31 +101,18 @@ function _M:sendLogs(logs_table)
             if (body ~= nil) then
                 local b, n , err = ngx.re.gsub(body, "com\\.amazonaws\\.kinesis\\.v20131202\\.[^\\s]+,", "", "ijo")
                 b, n , err = ngx.re.gsub(b, "\"SequenceNumber[^}]+", "", "ijo")
-                ngx.log(ngx.ERR, "MORE DETAILS:", tostring(b))
+                ngx.log(ngx.WARN, "MORE DETAILS:", tostring(b))
             end
         end
 
     end
 
     if (code ~= 200 ) then
-        ngx.log(ngx.ERR, "Logs were not sent to Kinesis. AWS Response:", tostring(code))
+        ngx.log(ngx.WARN, "Logs were not sent to Kinesis. AWS Response:", tostring(code))
         if (body ~= nil) then
             local b, n , err = ngx.re.gsub(body, "com\\.amazonaws\\.kinesis\\.v20131202\\.[^\\s]+,", "", "ijo")
-            ngx.log(ngx.ERR, "MORE DETAILS:", tostring(b))
+            ngx.log(ngx.WARN, "MORE DETAILS:", tostring(b))
         end
-        --[[local s = ""
-        for k,v in pairs(records) do
-            local s2 = ""
-            if (type(v) == "table") then
-                for k1,v1 in pairs(v) do
-                    s2 = s2 .. ", " .. k1 .. "=" .. tostring(v1)
-                end
-                s = s .. ", " .. k .. "=" .. tostring(s2)
-            else
-                s = s .. ", " .. k .. "=" .. tostring(v)
-            end
-        end
-        ngx.log(ngx.ERR, "RECORDS:", tostring(s))]]
     end
 
     return response, code, headers, status, body, failedRecords

@@ -1,7 +1,7 @@
 api-gateway-logger
 ==================
 
-Performant async event logger.
+Performant async logger.
 
 
 Loggers
@@ -18,10 +18,10 @@ The logs are sent when one of the following criteria is met:
 
 The BufferedAsyncLogger flushes data asynchronously and non-blocking to a configured backend system.
 It uses Lua's cosoket API to send data to an HTTP backend.
-Data is send asynchronously using via ngx.timer.at API which schedules a background non-blocking light thread.
+Data is sent asynchronously using `ngx.timer.at` API which schedules a background non-blocking light thread.
 This thread is completely decoupled from the main request.
 
-In high traffic conditions you can configure how many concurrent threads to be used for flushing logs.
+Depending on the backend you can configure more concurrent threads flush logs.
 Each thread is occupying a worker connection so make sure to configure nginx with enough worker connections.
 
 Example:
@@ -62,7 +62,9 @@ Example:
 Backend systems
 ===============
 
-
+AWS Kinesis backend
+------------------
+Sends logs to AWS Kinesis.
 
 HttpLogger backend
 ------------------
@@ -70,7 +72,7 @@ Sends data via POST to an HTTP location
 
 AwsSnsLogger backend
 --------------------
-Sends data to the AWS SNS, which can then forward the logs to an SQS
+Sends data to the AWS SNS, which can then forward the logs to an SQS.
 
 
 Developer guide
