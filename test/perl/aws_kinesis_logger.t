@@ -1,6 +1,3 @@
-#  Running this unit test:
-# TEST_NGINX_AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} TEST_NGINX_AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} TEST_NGINX_AWS_SECURITY_TOKEN=${AWS_SECURITY_TOKEN} PATH=/usr/local/sbin:$PATH TEST_NGINX_SERVROOT=`pwd`/target/servroot TEST_NGINX_PORT=1989 prove -I ./test/resources/test-nginx/lib -r ./test/perl/aws_kinesis_logger.t
-
 # vim:set ft= ts=4 sw=4 et fdm=marker:
 use lib 'lib';
 use warnings;
