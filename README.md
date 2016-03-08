@@ -102,6 +102,8 @@ Test files are located in `test/perl`.
 The other libraries such as `Redis`, `test-nginx` are located in `test/resources/`.
 Other files used when running the test are also located in `test/resources`.
 
+>NOTE: The test for Kinesis requires temporary AWS Credentials as environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SECURITY_TOKEN`.
+
 ## Build locally
  ```
 sudo LUA_LIB_DIR=/usr/local/api-gateway/lualib make install

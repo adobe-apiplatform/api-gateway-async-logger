@@ -1,8 +1,10 @@
 #  Running this unit test:
-# TEST_NGINX_AWS_SECRET=${AWS_SECRET_ACCESS_KEY} TEST_NGINX_AWS_CLIENT_ID=${AWS_ACCESS_KEY_ID} TEST_NGINX_AWS_TOKEN=${AWS_SECURITY_TOKEN} PATH=/usr/local/sbin:$PATH TEST_NGINX_SERVROOT=`pwd`/target/servroot TEST_NGINX_PORT=1989 prove -I ./test/resources/test-nginx/lib -r ./test/perl/aws_kinesis_logger.t
+# TEST_NGINX_AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} TEST_NGINX_AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} TEST_NGINX_AWS_SECURITY_TOKEN=${AWS_SECURITY_TOKEN} PATH=/usr/local/sbin:$PATH TEST_NGINX_SERVROOT=`pwd`/target/servroot TEST_NGINX_PORT=1989 prove -I ./test/resources/test-nginx/lib -r ./test/perl/aws_kinesis_logger.t
 
 # vim:set ft= ts=4 sw=4 et fdm=marker:
 use lib 'lib';
+use warnings;
+use strict;
 use Test::Nginx::Socket::Lua;
 use Cwd qw(cwd);
 
@@ -78,16 +80,14 @@ __DATA__
                           "Code" : "Success",
                           "LastUpdated" : "2014-11-03T01:56:20Z",
                           "Type" : "AWS-HMAC",
-                          "AccessKeyId" : "$TEST_NGINX_AWS_CLIENT_ID",
-                          "SecretAccessKey" : "$TEST_NGINX_AWS_SECRET",
-                          "Token" : "$TEST_NGINX_AWS_TOKEN",
+                          "AccessKeyId" : "$TEST_NGINX_AWS_ACCESS_KEY_ID",
+                          "SecretAccessKey" : "$TEST_NGINX_AWS_SECRET_ACCESS_KEY",
+                          "Token" : "$TEST_NGINX_AWS_SECURITY_TOKEN",
                           "Expiration" : "$expiration"
                         }';
         }
 
         location /test {
-            set $aws_access_key $TEST_NGINX_AWS_CLIENT_ID;
-            set $aws_secret_key $TEST_NGINX_AWS_SECRET;
             set $aws_region us-east-1;
             set $kinesis_stream_name "test-stream";
 
@@ -104,7 +104,6 @@ __DATA__
                             security_credentials_host = "127.0.0.1",      -- test only
                             security_credentials_port = $TEST_NGINX_PORT, -- test only
                             security_credentials_timeout = 60 * 60 * 24,
-                            sharedDict = "stats_all",
                             shared_cache_dict = "stats_all"
                         }
                     }

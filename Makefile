@@ -19,9 +19,15 @@ install: all
 	$(INSTALL) src/lua/api-gateway/zmq/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/zmq/
 
 test:
+	echo "updating git submodules ..."
+	if [ ! -d "test/resources/test-nginx/lib" ]; then	git submodule update --init --recursive; fi
 	echo "running tests ..."
 #	cp -r test/resources/api-gateway $(BUILD_DIR)
-	PATH=/usr/local/sbin:$$PATH TEST_NGINX_SERVROOT=`pwd`/$(BUILD_DIR)/servroot TEST_NGINX_PORT=1989 prove -I ./test/resources/test-nginx/lib -r ./test/perl
+	TEST_NGINX_AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" TEST_NGINX_AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" TEST_NGINX_AWS_SECURITY_TOKEN="${AWS_SECURITY_TOKEN}"  \
+	    PATH=/usr/local/sbin:$$PATH \
+	    TEST_NGINX_SERVROOT=`pwd`/$(BUILD_DIR)/servroot \
+	    TEST_NGINX_PORT=1989 \
+	    prove -I ./test/resources/test-nginx/lib -I ./test/resources/test-nginx/inc -r ./test/perl
 
 package:
 	git tag -a v0.6 -m 'release-0.6'
