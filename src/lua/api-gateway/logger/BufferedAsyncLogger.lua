@@ -187,7 +187,7 @@ local function doFlushMetrics(premature, self)
         -- Handling failure cases
         -- 1. Check if the backend responded OK
         if (responseCode ~= 200) then
-            ngx.log(ngx.ERR, "Failed to send ", tostring(number_of_logs), " logs to the backend. Saving them for later in the shared dict ...")
+            ngx.log(ngx.WARN, "Failed to send ", tostring(number_of_logs), " logs to the backend. Saving them for later in the shared dict ...")
             -- add metrics back
             for k,v in pairs(logs) do
                 -- add each metric back into the dict
@@ -206,7 +206,7 @@ local function doFlushMetrics(premature, self)
             end
         end
         if (logsToResendCounter > 0) then
-            ngx.log(ngx.ERR, "Resending: ", tostring(logsToResendCounter), " out of " , tostring(number_of_logs) , " logs again.")
+            ngx.log(ngx.WARN, "Resending: ", tostring(logsToResendCounter), " out of " , tostring(number_of_logs) , " logs again.")
         end
 
         return
@@ -226,7 +226,7 @@ function AsyncLogger:flushMetrics()
         local delay = math.random(10, 100)
         local ok, err = ngx.timer.at(delay / 1000, doFlushMetrics, self)
         if not ok then
-            ngx.log(ngx.ERR, "Could not flushMetrics this time, will retry later. Details: ", err)
+            ngx.log(ngx.WARN, "Could not flushMetrics this time, will retry later. Details: ", err)
             return false
         end
         ngx.log(ngx.DEBUG, "Scheduling flushMetrics in " .. tostring(delay) .. "ms.")
