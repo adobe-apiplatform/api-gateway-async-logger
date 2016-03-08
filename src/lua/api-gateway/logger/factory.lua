@@ -85,13 +85,23 @@ end
 
 --- Returns an instance of the moduleName. If the moduleName is initialized alread, it returns the already created instance.
 -- This instance should be unique per each nginx worker process
--- @param name A name for this logger.
+-- @param name A name for the logger.
 -- @param logger_module The logger module to use. This module must expose a `new` method for initializing it.
 --                   I.e. api-gateway.logger.BufferedAsyncLogger
 -- @param options The init options for the logger module
 --
 function _M:getLogger(name, logger_module, options)
     return _getLogger(name, logger_module, options)
+end
+
+--- Returns true if a logger with the given name has been defined already
+-- @param name A name for the logger
+--
+function _M:hasLogger(name)
+    if (_M.loggers[name] ~= nil) then
+        return true
+    end
+    return false
 end
 
 return _M

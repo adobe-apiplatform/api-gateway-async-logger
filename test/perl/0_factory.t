@@ -77,6 +77,8 @@ __DATA__
                 l = logger_factory:getLogger("test-logger", "inexisting.module")
                 result = result .. ",l3=" .. tostring(l)
 
+                result = result .. ",hasLogger=" .. tostring(logger_factory:hasLogger("test"))
+
                 ngx.say(result)
            ';
         }
@@ -84,7 +86,7 @@ __DATA__
 --- request
 GET /test
 --- response_body
-l=nil,l2=nil,l3=nil
+l=nil,l2=nil,l3=nil,hasLogger=false
 --- error_code: 200
 --- no_error_log
 [error]
