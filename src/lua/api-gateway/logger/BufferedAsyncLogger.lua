@@ -78,8 +78,8 @@ function AsyncLogger:logMetrics(key, value)
     --value = toString(value) or ""
     if tostring(value) == "" or value == nil
             or tostring(key) == "" or key == nil then -- to exit when nil/zero
-        ngx.log(ngx.ERR, "Could not log metric with key=" .. tostring(key) .. ", value=" .. tostring(value))
-        return 0
+    ngx.log(ngx.ERR, "Could not log metric with key=" .. tostring(key) .. ", value=" .. tostring(value))
+    return 0
     end
 
     ngx.log(ngx.DEBUG, "adding new metric. key=", tostring(key), ", value=", tostring(value))
@@ -94,7 +94,26 @@ function AsyncLogger:logMetrics(key, value)
     -- add the key and value
     local status = self.logerSharedDict:add(key, value)
 
-    -- decide if it's time to flush or not
+    if(self:shouldFlush()) then
+        self:flushMetrics()
+    end
+
+    return status
+end
+
+function AsyncLogger:getCount()
+    local count = self.logerSharedDict:get("counter")
+    if (count == nil) then
+        self.logerSharedDict:add("counter", 1)
+        count = 1
+    end
+    return count
+end
+
+--- decide if it's time to flush or not
+--
+function AsyncLogger:shouldFlush()
+    local count = self:getCount()
     local lastFlushTimestamp = self.logerSharedDict:get("lastFlushTimestamp")
     if (lastFlushTimestamp == nil) then
         lastFlushTimestamp = ngx.now()
@@ -109,14 +128,13 @@ function AsyncLogger:logMetrics(key, value)
         ngx.log(ngx.DEBUG, "Flushing metrics. is_buffer_full=", tostring(is_buffer_full),
             " , is_flush_interval_expired=", tostring(is_flush_interval_expired),
             " , time_since_last_flush=", tostring(time_since_last_flush))
-        self:flushMetrics()
+        return true
     else
         ngx.log(ngx.DEBUG, "Metrics not flushed. is_buffer_full=", tostring(is_buffer_full),
             " , is_flush_interval_expired=", tostring(is_flush_interval_expired),
             " , time_since_last_flush=", tostring(time_since_last_flush))
+        return false
     end
-
-    return status
 end
 
 -- returns the buffered logs and clears the dict
@@ -141,13 +159,15 @@ function AsyncLogger:getLogsFromSharedDict()
                 and metric ~= "ExpireAtTimestamp") then
             --mark item as expired
             local v = allMetrics:get(metric)
-            logs[metric] = v
-            logs_c = logs_c + 1
+            if (v ~= nil and metric ~= nil) then
+                logs[metric] = v
+                logs_c = logs_c + 1
+            end
             allMetrics:delete(metric)
         end
     end
 
-    local dict_counter = self.logerSharedDict:get("counter")
+    local dict_counter = self:getCount()
     local remaining_count = 0
     if (dict_counter > self.flush_length) then
         remaining_count = dict_counter - self.flush_length
@@ -172,12 +192,6 @@ local function tableToString(table_ref)
 end
 
 local function doFlushMetrics(premature, self)
-    ngx.log(ngx.DEBUG, "Flushing metrics with premature flag:", premature, " to backend:", tostring(self.backend), " self=", tostring(tableToString(self)) )
-    -- decremenet pendingTimers
-    self.logerSharedDict:incr("pendingTimers", -1)
-    -- save a timestamp of the last flush
-    self.logerSharedDict:set("lastFlushTimestamp", ngx.now())
-
     -- read the data and expire logs
     local logs, number_of_logs = self:getLogsFromSharedDict()
     if (number_of_logs > 0) then
@@ -186,7 +200,7 @@ local function doFlushMetrics(premature, self)
 
         -- Handling failure cases
         -- 1. Check if the backend responded OK
-        if (responseCode ~= 200) then
+        if (responseCode ~= 200 and failedRecords == nil) then
             ngx.log(ngx.WARN, "Failed to send ", tostring(number_of_logs), " logs to the backend. Saving them for later in the shared dict ...")
             -- add metrics back
             for k,v in pairs(logs) do
@@ -209,9 +223,30 @@ local function doFlushMetrics(premature, self)
             ngx.log(ngx.WARN, "Resending: ", tostring(logsToResendCounter), " out of " , tostring(number_of_logs) , " logs again.")
         end
 
+        if (self.callback ~= nil) then
+            local ok, resp = pcall(self.callback, {
+                logs_sent = number_of_logs,
+                logs_failed = logsToResendCounter,
+                backend_response_code = responseCode
+            })
+            if (not ok) then
+                ngx.log(ngx.ERR, "callback error.")
+            end
+        end
         return
     end
     ngx.log(ngx.WARN, "Could not flush metrics to backend ", tostring(self.backend) , " number_of_logs=", tostring(number_of_logs) )
+end
+
+local function flushMetrics_timerCallback(premature, self)
+    ngx.log(ngx.DEBUG, "Flushing metrics with premature flag:", premature, " to backend:", tostring(self.backend), " self=", tostring(tableToString(self)) )
+
+    local ok, result = pcall(doFlushMetrics, premature, self)
+
+    -- decremenet pendingTimers
+    self.logerSharedDict:incr("pendingTimers", -1)
+    -- save a timestamp of the last flush
+    self.logerSharedDict:set("lastFlushTimestamp", ngx.now())
 end
 
 -- Send data to a backend.
@@ -224,7 +259,7 @@ function AsyncLogger:flushMetrics()
     if (concurrency < self.flush_concurrency) then
         -- pick a random delay between 10ms to 100ms when to spawn this timer
         local delay = math.random(10, 100)
-        local ok, err = ngx.timer.at(delay / 1000, doFlushMetrics, self)
+        local ok, err = ngx.timer.at(delay / 1000, flushMetrics_timerCallback, self)
         if not ok then
             ngx.log(ngx.WARN, "Could not flushMetrics this time, will retry later. Details: ", err)
             return false

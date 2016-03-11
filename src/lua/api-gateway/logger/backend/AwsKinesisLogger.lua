@@ -101,7 +101,7 @@ function _M:sendLogs(logs_table)
             if (body ~= nil) then
                 local b, n , err = ngx.re.gsub(body, "com\\.amazonaws\\.kinesis\\.v20131202\\.[^\\s]+,", "", "ijo")
                 b, n , err = ngx.re.gsub(b, "\"SequenceNumber[^}]+", "", "ijo")
-                ngx.log(ngx.WARN, "MORE DETAILS:", tostring(b))
+                ngx.log(ngx.WARN, "Error on ", tostring(response.FailedRecordCount), " records.", "MORE DETAILS:", tostring(b))
             end
         end
 
@@ -111,7 +111,7 @@ function _M:sendLogs(logs_table)
         ngx.log(ngx.WARN, "Logs were not sent to Kinesis. AWS Response:", tostring(code))
         if (body ~= nil) then
             local b, n , err = ngx.re.gsub(body, "com\\.amazonaws\\.kinesis\\.v20131202\\.[^\\s]+,", "", "ijo")
-            ngx.log(ngx.WARN, "MORE DETAILS:", tostring(b))
+            ngx.log(ngx.WARN, "Error on ", tostring(rcount), " records.", "MORE DETAILS:", tostring(b))
         end
     end
 
@@ -137,12 +137,12 @@ function _M:getKinesisRecords(logs_table)
     local nr = 1
     for key, value in pairs(logs_table) do
         -- exclude the counter of the number of values in the shared dict
-        if (key ~= "counter") then
-            r[nr] = {
-                Data = value,
-                PartitionKey = key
-            }
-            nr = nr + 1
+        if (key ~= "counter") then -- TODO: this line may be removed as well
+        r[nr] = {
+            Data = value,
+            PartitionKey = key
+        }
+        nr = nr + 1
         end
     end
     return r, nr
