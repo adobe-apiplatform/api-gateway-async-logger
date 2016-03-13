@@ -62,7 +62,7 @@ __DATA__
 === TEST 1: test that the logs can be pushed to kinesis
 --- http_config eval: $::HttpConfig
 --- config
-        error_log ../aws_kinesis_logger_test1_error.log debug;
+        error_log ../test-logs/aws_kinesis_logger_test1_error.log debug;
 
         location = /latest/meta-data/iam/security-credentials/ {
             return 200 'test-iam-user';

@@ -63,7 +63,7 @@ __DATA__
 === TEST 1: test that factory return null when no name is provided
 --- http_config eval: $::HttpConfig
 --- config
-        error_log ../factory_test1_error.log debug;
+        error_log ../test-logs/factory_test1_error.log debug;
 
         location /test {
             content_by_lua '
@@ -97,7 +97,7 @@ X-Test: test
 === TEST 2: test that factory returns the same instance of the logger for consecutive gets
 --- http_config eval: $::HttpConfig
 --- config
-        error_log ../factory_test2_error.log debug;
+        error_log ../test-logs/factory_test2_error.log debug;
 
         location /test {
 

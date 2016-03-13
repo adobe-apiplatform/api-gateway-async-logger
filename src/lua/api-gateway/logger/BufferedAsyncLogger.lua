@@ -26,6 +26,8 @@
 -- Date: 15/05/14
 --
 
+local lock_cls = require "resty.lock"
+
 --
 local AsyncLogger = {}
 
@@ -39,8 +41,13 @@ local DEFAULT_CONCURRENCY = 3
 
 ---
 -- Specifies the maximum time in seconds since last flush
--- after which the metrics would be flushed out regardless if the buffer is not full
+-- after which the metrics would be flushed out regardless if the buffer full or not
 local DEFAULT_FLUSH_INTERVAL = 5
+
+---
+-- Specifies the maximum throughput per seconds for sending logs
+--
+local DEFAULT_FLUSH_THROUGHPUT = 1000000
 
 
 function AsyncLogger:new(o)
@@ -59,9 +66,12 @@ function AsyncLogger:new(o)
         o.logerSharedDict = ngx.shared[o.sharedDict]
         o.flush_concurrency = o.flush_concurrency or DEFAULT_CONCURRENCY
         o.flush_interval = o.flush_interval or DEFAULT_CONCURRENCY
+        o.flush_throughput = o.flush_throughput or DEFAULT_FLUSH_THROUGHPUT
 
         local backendCls = assert(require(o.backend), "please provide a valid backend class name")
         o.backendInst = backendCls:new(o.backend_opts)
+        -- create a lock that expires in 500ms and times out in 900
+        o.mutex_lock = lock_cls:new(o.sharedDict, {exptime = 0.500, timeout=0.900})
     end
 
     ngx.log(ngx.DEBUG, "Initialized new async logger with backend ", tostring(o.backend), " instance:", tostring(o.backendInst))
@@ -101,57 +111,111 @@ function AsyncLogger:logMetrics(key, value)
     return status
 end
 
+--- Returns the number of logs as tracked in the "counter" element of the shared dictionary.
+--   This number should match the total number of items in the shared dictionary
 function AsyncLogger:getCount()
     local count = self.logerSharedDict:get("counter")
     if (count == nil) then
-        self.logerSharedDict:add("counter", 1)
-        count = 1
+        self.logerSharedDict:add("counter", 0)
+        count = 0
     end
     return count
 end
 
---- decide if it's time to flush or not
---
+--- Decides if it's time to flush or not
+-- This method returns true if one the following is true:
+--   1. the number of logs is greater than the flush_length
+--   2. the time since last flush is greater than flush_interval
+--   3. the throughput is not exceeded
 function AsyncLogger:shouldFlush()
     local count = self:getCount()
     local lastFlushTimestamp = self.logerSharedDict:get("lastFlushTimestamp")
     if (lastFlushTimestamp == nil) then
         lastFlushTimestamp = ngx.now()
-        self.logerSharedDict:set("lastFlushTimestamp", lastFlushTimestamp)
+        -- add method only sets the key if it doesn't exist
+        self.logerSharedDict:add("lastFlushTimestamp", lastFlushTimestamp)
     end
 
-    local is_buffer_full = (count >= self.flush_length)
+    -- also take into account any pending threads already scheduled
+    local pending_threads = self.logerSharedDict:get("pending_threads")
+    -- an approximate number of logs that could be sent by the pending threads
+    local possible_extra_logs = (pending_threads or 0) * self.flush_length
+
+    local current_throughput = self.logerSharedDict:get("throughput_counter")
+    if (current_throughput == nil) then
+        current_throughput = 0
+        local secs = ngx.now() --the elapsed time in seconds (including milliseconds as the decimal part) from the epoch
+        local ms_to_sec = secs - math.floor(secs) -- compute how long until the current second expires
+        local exptime = 1 - ms_to_sec
+        -- don't track the throughput when there's 50ms left from the current second
+        if ( exptime > 0.050) then
+            -- add method only sets the key if it doesn't exist
+            self.logerSharedDict:add("throughput_counter", current_throughput, exptime)
+        end
+    end
+
+    local is_buffer_full = (count >= self.flush_length + possible_extra_logs)
     local time_since_last_flush = (ngx.now() - lastFlushTimestamp)
     local is_flush_interval_expired = (self.flush_interval < time_since_last_flush)
 
-    if (is_buffer_full or is_flush_interval_expired) then
+    local is_throughput_exceeded = false
+    if (current_throughput + possible_extra_logs >= self.flush_throughput) then
+        is_throughput_exceeded = true
+    end
+
+    if ((is_buffer_full or is_flush_interval_expired) and is_throughput_exceeded == false) then
         ngx.log(ngx.DEBUG, "Flushing metrics. is_buffer_full=", tostring(is_buffer_full),
             " , is_flush_interval_expired=", tostring(is_flush_interval_expired),
-            " , time_since_last_flush=", tostring(time_since_last_flush))
+            " , time_since_last_flush=", tostring(time_since_last_flush),
+            " , is_throughput_exceeded=", tostring(is_throughput_exceeded)
+        )
         return true
     else
         ngx.log(ngx.DEBUG, "Metrics not flushed. is_buffer_full=", tostring(is_buffer_full),
             " , is_flush_interval_expired=", tostring(is_flush_interval_expired),
-            " , time_since_last_flush=", tostring(time_since_last_flush))
+            " , time_since_last_flush=", tostring(time_since_last_flush),
+            " , is_throughput_exceeded=", tostring(is_throughput_exceeded)
+        )
         return false
     end
 end
 
--- returns the buffered logs and clears the dict
+--- Returns the logs from the shared dict
+--    A number of flush_length logs are returned, unless the throughput in the current second has exceeded
+--    If the flush_length is over the enforced throughput, only the remaining logs are returned
+--  IMPORTANT: Make sure to obtain a lock before calling this method.
 function AsyncLogger:getLogsFromSharedDict()
-
     -- convert shared_dict to table
     local allMetrics = self.logerSharedDict
     if (allMetrics == nil) then
         return nil
     end
+
+    local current_throughput = self.logerSharedDict:get("throughput_counter")
+    current_throughput = current_throughput or 0
+    local actual_flush_length = self.flush_length
+    if (actual_flush_length + current_throughput >= self.flush_throughput) then
+        actual_flush_length = self.flush_throughput - current_throughput
+    end
+    -- actual_flust_length should never be 0.
+    -- 0 means get ALL records from the dictionary which is very bad
+    if (actual_flush_length <= 0) then
+        actual_flush_length = self.flush_length
+    end
+
     local logs = {}
     local logs_c = 0
-    local keys = allMetrics:get_keys(self.flush_length)
+    local keys = allMetrics:get_keys(actual_flush_length)
+    local dict_counter = self:getCount()
 
     for i, metric in pairs(keys) do
-        if (metric ~= "counter" and metric ~= "pendingTimers"
+        if (metric ~= "counter"
+                and metric ~= "pending_threads"
+                and metric ~= "running_threads"
+                and metric ~= "pendingTimers_lock"
+                and metric ~= "flush_lock"
                 and metric ~= "lastFlushTimestamp"
+                and metric ~= "throughput_counter"
                 and metric ~= "AccessKeyId"
                 and metric ~= "SecretAccessKey"
                 and metric ~= "Token"
@@ -167,18 +231,15 @@ function AsyncLogger:getLogsFromSharedDict()
         end
     end
 
-    local dict_counter = self:getCount()
-    local remaining_count = 0
-    if (dict_counter > self.flush_length) then
-        remaining_count = dict_counter - self.flush_length
+    local remaining_logs = dict_counter - logs_c
+    if (remaining_logs < 0) then
+        ngx.log(ngx.WARN, "Unexpected value for remaining logs:", tostring(remaining_logs))
+        remaining_logs = 0
     end
-    if (remaining_count ~= dict_counter) then
-        self.logerSharedDict:set("counter", remaining_count)
+    self.logerSharedDict:set("counter", remaining_logs)
+    if (logs_c > 0) then
+        self.logerSharedDict:incr("throughput_counter", logs_c)
     end
-
-    -- TODO: consider exposing the flush_expired method
-    allMetrics:flush_expired()
-
     return logs, logs_c
 end
 
@@ -192,8 +253,26 @@ local function tableToString(table_ref)
 end
 
 local function doFlushMetrics(premature, self)
+    -- #######  get a MUTEX lock
+    local flush_lock = lock_cls:new(self.sharedDict, {exptime = 0.100, timeout=0.900})
+    local elapsed, err = flush_lock:lock("flush_lock")
+    if (err) then
+        ngx.log(ngx.ERR, "Could not acquire lock for 'flush_lock'. premature=", tostring(premature), ", err=", err)
+    end
+    ngx.log(ngx.DEBUG, "Lock 'flush_lock' acquired in:", tostring(elapsed), " seconds.")
+
     -- read the data and expire logs
-    local logs, number_of_logs = self:getLogsFromSharedDict()
+    local ok, logs, number_of_logs = pcall(self.getLogsFromSharedDict, self)
+    if (not ok) then
+        ngx.log(ngx.ERR, "Could not read logs from shared dict. err:", tostring(logs))
+    end
+
+    -- ######  release the MUTEX lock
+    local unlock_ok, err = flush_lock:unlock()
+    if (not unlock_ok) then
+        ngx.log(ngx.ERR, "Could not unlock 'flush_lock':", err)
+    end
+
     if (number_of_logs > 0) then
         -- call the backend
         local ok, responseCode, headers, status, body, failedRecords = self.backendInst:sendLogs(logs)
@@ -241,22 +320,56 @@ end
 local function flushMetrics_timerCallback(premature, self)
     ngx.log(ngx.DEBUG, "Flushing metrics with premature flag:", premature, " to backend:", tostring(self.backend), " self=", tostring(tableToString(self)) )
 
+    -- decremenet the number of pending threads before flushing
+    self.logerSharedDict:incr("pending_threads", -1)
+    -- increment the number of running threads
+    self.logerSharedDict:incr("running_threads", 1)
+
     local ok, result = pcall(doFlushMetrics, premature, self)
 
-    -- decremenet pendingTimers
-    self.logerSharedDict:incr("pendingTimers", -1)
+    -- decrement the number of running threads
+    self.logerSharedDict:incr("running_threads", -1)
     -- save a timestamp of the last flush
     self.logerSharedDict:set("lastFlushTimestamp", ngx.now())
 end
 
+function AsyncLogger:get_pending_threads()
+    local pending_threads = tonumber(self.logerSharedDict:get("pending_threads"))
+    if (pending_threads == nil or pending_threads < 0) then
+        pending_threads = 0
+        self.logerSharedDict:add("pending_threads", 0)
+    end
+    return pending_threads
+end
+
+function AsyncLogger:get_running_threads()
+    local running_threads = tonumber(self.logerSharedDict:get("running_threads"))
+    if (running_threads == nil or running_threads < 0) then
+        running_threads = 0
+        self.logerSharedDict:add("running_threads", 0)
+    end
+    return running_threads
+end
+
 -- Send data to a backend.
 function AsyncLogger:flushMetrics()
-    local concurrency = self.logerSharedDict:get("pendingTimers")
-    if (concurrency == nil or concurrency < 0) then
-        concurrency = 0
-        self.logerSharedDict:set("pendingTimers", 0)
+    -- obtain a lock to check for how many concurrent timers there are
+    --[[local elapsed, err = self.mutex_lock:lock("pendingTimers_lock")
+    if (err) then
+        ngx.log(ngx.ERR, "Could not aquire lock for 'pendingTimers_lock'. err=", err)
     end
-    if (concurrency < self.flush_concurrency) then
+    ngx.log(ngx.DEBUG, "Lock 'pendingTimers_lock' acquired in:", tostring(elapsed), " seconds.")]]
+
+    local pending_threads = self:get_pending_threads()
+    local running_threads = self:get_running_threads()
+
+    -- release the lock
+    --[[local unlock_ok, err = self.mutex_lock:unlock()
+    if (not unlock_ok) then
+        ngx.log(ngx.ERR, "Could not unlock 'pendingTimers_lock':", err)
+    end]]
+
+    if (pending_threads + running_threads <= self.flush_concurrency) then
         -- pick a random delay between 10ms to 100ms when to spawn this timer
         local delay = math.random(10, 100)
         local ok, err = ngx.timer.at(delay / 1000, flushMetrics_timerCallback, self)
@@ -266,7 +379,7 @@ function AsyncLogger:flushMetrics()
         end
         ngx.log(ngx.DEBUG, "Scheduling flushMetrics in " .. tostring(delay) .. "ms.")
         -- at this point we're certain the timer has started successfully
-        self.logerSharedDict:incr("pendingTimers", 1)
+        self.logerSharedDict:incr("pending_threads", 1)
         return true
     end
     -- concurrency limit is reached at this point, no more thread is spawn

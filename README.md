@@ -11,8 +11,10 @@ The logs are sent when one of the following criteria is met:
  * the buffer is full ( `flush_buffer` property) . Default value is 10 logs.
  * it's been more than `flush_interval` seconds since the last flush. Default value is 5 seconds.
  * there are available threads to send logs ( `flush_concurrency` property ). Default value is 3 concurrent threads.
+ * throughput rate per second is not exceeded ( `flush_throughput` property ). Default is 1000000. 
+   This is a useful setting controlling the rate per second at which the logs are flushed to the backend.
  
-So by default the logger sends up to `30` logs simultaneously. 
+So by default the logger sends up to `30` logs simultaneously and if the backend performance is good, it may send more than this per second. 
 
 ### Performance
 The `BufferedAsyncLogger` modules flushes data asynchronously and non-blocking to a configured backend system.
