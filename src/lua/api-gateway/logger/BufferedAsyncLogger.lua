@@ -320,7 +320,10 @@ local function doFlushMetrics(premature, self)
             local ok, resp = pcall(self.callback, {
                 logs_sent = number_of_logs,
                 logs_failed = logsToResendCounter,
-                backend_response_code = responseCode
+                backend_response_code = responseCode,
+                threads_running = self:get_running_threads(),
+                threads_pending = self:get_pending_threads(),
+                buffer_length = self:getCount()
             })
             if (not ok) then
                 ngx.log(ngx.ERR, "callback error.")

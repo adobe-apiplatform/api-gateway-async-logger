@@ -11,7 +11,7 @@ use Cwd qw(cwd);
 
 repeat_each(1);
 
-plan tests => repeat_each() * (blocks() * 4) - 6;
+plan tests => repeat_each() * (blocks() * 4) - 7;
 
 my $pwd = cwd();
 
@@ -365,6 +365,77 @@ GET /t
 GET /t
 --- response_body_like eval
 "1st flush timestamp:\\d+\\.\\d+\n2nd flush timestamp:\\d+.*Last flush content"
+--- error_code: 200
+--- no_error_log
+[error]
+
+
+=== TEST 7: test that callback is called correctly
+--- http_config eval: $::HttpConfig
+--- config
+        error_log ../test-logs/buffered_logger_test7_error.log debug;
+        location /t {
+            content_by_lua '
+                local BufferedAsyncLogger = require "api-gateway.logger.BufferedAsyncLogger"
+
+                local logs_sent = 0
+                local logs_failed = 0
+                local threads_running, threads_pending, buffer_length
+
+                local logger = BufferedAsyncLogger:new({
+                    flush_length = 200,
+                    flush_concurrency = 5,
+                    sharedDict = "stats_all",
+                    backend = "api-gateway.logger.backend.HttpLogger",
+                    backend_opts = {
+                        host = "127.0.0.1",
+                        port = "1989",
+                        url = "/flush-location",
+                        method = "POST"
+                    },
+                    callback = function(status)
+                        threads_running = status.threads_running
+                        threads_pending = status.threads_pending
+                        buffer_length = status.buffer_length
+                        logs_sent = logs_sent + status.logs_sent
+                        logs_failed = logs_failed + status.logs_failed
+                    end
+                })
+                for i=1,500 do
+                   logger:logMetrics(i, "value" .. tostring(i))
+                end
+                ngx.say("1. Total logs:" .. logger:getCount())
+                ngx.say("1. Pending threads left:" .. logger:get_pending_threads())
+                ngx.sleep(0.500)
+                ngx.say("2. Pending threads left:" .. logger:get_pending_threads())
+                ngx.say("3. Running threads left:" .. logger:get_running_threads())
+                ngx.say("4. Total logs left:" .. logger:getCount())
+                ngx.say("threads_running:" .. tostring(threads_running))
+                ngx.say("threads_pending:" .. tostring(threads_pending))
+                ngx.say("buffer_length:" .. tostring(buffer_length))
+                ngx.say("logs_sent:" .. tostring(logs_sent))
+                ngx.say("logs_failed:" .. tostring(logs_failed))
+            ';
+        }
+        location /flush-location {
+            lua_need_request_body on;
+            content_by_lua '
+                ngx.log(ngx.WARN, "Flush content: " .. ngx.var.request_body)
+            ';
+        }
+--- request
+GET /t
+--- response_body
+1. Total logs:500
+1. Pending threads left:2
+2. Pending threads left:0
+3. Running threads left:0
+4. Total logs left:100
+threads_running:1
+threads_pending:0
+buffer_length:100
+logs_sent:400
+logs_failed:0
 --- error_code: 200
 --- no_error_log
 [error]
