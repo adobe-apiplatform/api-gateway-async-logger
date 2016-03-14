@@ -100,6 +100,7 @@ timer is pending and message is I am being executed via timer
                 local dict =  ngx.shared.stats_all
                 ngx.say( dict:get("1") )
                 ngx.say( dict:get(2) )
+                ngx.say(logger:getCount())
             ';
         }
 --- request
@@ -107,6 +108,7 @@ GET /t
 --- response_body
 value1
 value2
+2
 --- error_code: 200
 --- no_error_log
 [error]
@@ -147,6 +149,9 @@ value2
                 if (pending_threads ~= 1) then
                     ngx.say("pending_threads should have been 1 as no new ")
                 end
+                if (logger:getCount() ~= 3) then
+                    ngx.say("Counter should have been 3")
+                end
                 ngx.sleep(0.100) -- threads are scheduled after max 100ms
                 running_threads = logger:get_running_threads()
                 if (running_threads ~= 1) then
@@ -155,6 +160,9 @@ value2
                 pending_threads = logger:get_pending_threads()
                 if (pending_threads ~= 0) then
                     ngx.say("pending_threads should have been 0 as there is a running thread")
+                end
+                if (logger:getCount() ~= 1) then
+                    ngx.say("Counter should have been 1 as 2 logs should have been flushed")
                 end
 
                 ngx.sleep(0.500)
@@ -206,11 +214,12 @@ value1,value2
                 for i=1,500 do
                    logger:logMetrics(i, "value" .. tostring(i))
                 end
-
+                ngx.say("1. Total logs:" .. logger:getCount())
                 ngx.say("1. Pending threads left:" .. logger:get_pending_threads())
                 ngx.sleep(0.500)
                 ngx.say("2. Pending threads left:" .. logger:get_pending_threads())
                 ngx.say("3. Running threads left:" .. logger:get_running_threads())
+                ngx.say("4. Total logs left:" .. logger:getCount())
             ';
         }
         location /flush-location {
@@ -222,9 +231,11 @@ value1,value2
 --- request
 GET /t
 --- response_body
+1. Total logs:500
 1. Pending threads left:2
 2. Pending threads left:0
 3. Running threads left:0
+4. Total logs left:100
 --- error_code: 200
 --- no_error_log
 [error]
@@ -255,7 +266,7 @@ GET /t
                 for i=1,70 do
                    logger:logMetrics(i, "value" .. tostring(i))
                 end
-
+                ngx.say("1. Total logs:" .. logger:getCount())
                 ngx.say("1. Pending threads left:" .. logger:get_pending_threads())
                 ngx.sleep(0.500)
                 ngx.say("2. Pending threads left:" .. logger:get_pending_threads())
@@ -266,6 +277,8 @@ GET /t
                 ngx.sleep(0.100)
                 ngx.say("5. Pending threads left:" .. logger:get_pending_threads())
                 ngx.say("6. Running threads left:" .. logger:get_running_threads())
+                -- at this point there should only be 1 log left in the buffer
+                ngx.say("7. Total logs left:" .. logger:getCount())
             ';
         }
         location /flush-location {
@@ -277,12 +290,14 @@ GET /t
 --- request
 GET /t
 --- response_body
+1. Total logs:70
 1. Pending threads left:3
 2. Pending threads left:0
 3. Running threads left:0
 4. Pending threads left:1
 5. Pending threads left:0
 6. Running threads left:0
+7. Total logs left:1
 --- error_code: 200
 --- no_error_log
 [error]

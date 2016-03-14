@@ -70,8 +70,6 @@ function AsyncLogger:new(o)
 
         local backendCls = assert(require(o.backend), "please provide a valid backend class name")
         o.backendInst = backendCls:new(o.backend_opts)
-        -- create a lock that expires in 500ms and times out in 900
-        o.mutex_lock = lock_cls:new(o.sharedDict, {exptime = 0.500, timeout=0.900})
     end
 
     ngx.log(ngx.DEBUG, "Initialized new async logger with backend ", tostring(o.backend), " instance:", tostring(o.backendInst))
@@ -191,6 +189,9 @@ function AsyncLogger:getLogsFromSharedDict()
         return nil
     end
 
+    local logs = {}
+    local logs_c = 0
+
     local current_throughput = self.logerSharedDict:get("throughput_counter")
     current_throughput = current_throughput or 0
     local actual_flush_length = self.flush_length
@@ -200,15 +201,16 @@ function AsyncLogger:getLogsFromSharedDict()
     -- actual_flust_length should never be 0.
     -- 0 means get ALL records from the dictionary which is very bad
     if (actual_flush_length <= 0) then
-        actual_flush_length = self.flush_length
+        -- at this point we might be over the expected throughput
+        return logs, logs_c
     end
 
-    local logs = {}
-    local logs_c = 0
     local keys = allMetrics:get_keys(actual_flush_length)
     local dict_counter = self:getCount()
 
     for i, metric in pairs(keys) do
+        -- make sure to exclude any other variables stored in this dict which are not actually logs
+        -- an alternative would be to use another dictionary but it would make the API for the user a little more complex
         if (metric ~= "counter"
                 and metric ~= "pending_threads"
                 and metric ~= "running_threads"
@@ -221,7 +223,6 @@ function AsyncLogger:getLogsFromSharedDict()
                 and metric ~= "Token"
                 and metric ~= "ExpireAt"
                 and metric ~= "ExpireAtTimestamp") then
-            --mark item as expired
             local v = allMetrics:get(metric)
             if (v ~= nil and metric ~= nil) then
                 logs[metric] = v
@@ -231,9 +232,22 @@ function AsyncLogger:getLogsFromSharedDict()
         end
     end
 
+    ngx.log(ngx.DEBUG, "pending_threads=", tostring(self:get_pending_threads()),
+        ", running_threads=", tostring(self:get_running_threads()),
+        ", counter=", tostring(dict_counter),
+        ", logs_c=", tostring(logs_c),
+        ", actual_flush_length=", tostring(actual_flush_length)
+    )
+
     local remaining_logs = dict_counter - logs_c
     if (remaining_logs < 0) then
-        ngx.log(ngx.WARN, "Unexpected value for remaining logs:", tostring(remaining_logs))
+        ngx.log(ngx.DEBUG, "Unexpected value for remaining logs:", tostring(remaining_logs))
+        remaining_logs = 0
+    end
+    if (actual_flush_length > logs_c) then
+        -- if the number of elements returned by the dictionary is less than the expected length
+        -- there are no more remaining logs left so we are safe to reset the counter to 0 as well
+        ngx.log(ngx.DEBUG, "Correcting the 'counter' for the logs to 0.")
         remaining_logs = 0
     end
     self.logerSharedDict:set("counter", remaining_logs)
@@ -353,21 +367,8 @@ end
 
 -- Send data to a backend.
 function AsyncLogger:flushMetrics()
-    -- obtain a lock to check for how many concurrent timers there are
-    --[[local elapsed, err = self.mutex_lock:lock("pendingTimers_lock")
-    if (err) then
-        ngx.log(ngx.ERR, "Could not aquire lock for 'pendingTimers_lock'. err=", err)
-    end
-    ngx.log(ngx.DEBUG, "Lock 'pendingTimers_lock' acquired in:", tostring(elapsed), " seconds.")]]
-
     local pending_threads = self:get_pending_threads()
     local running_threads = self:get_running_threads()
-
-    -- release the lock
-    --[[local unlock_ok, err = self.mutex_lock:unlock()
-    if (not unlock_ok) then
-        ngx.log(ngx.ERR, "Could not unlock 'pendingTimers_lock':", err)
-    end]]
 
     if (pending_threads + running_threads <= self.flush_concurrency) then
         -- pick a random delay between 10ms to 100ms when to spawn this timer
