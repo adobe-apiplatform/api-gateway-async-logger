@@ -3,8 +3,23 @@ api-gateway-logger
 
 Performant async logger.
 
-BufferedAsyncLogger
-=====================
+Table of Contents
+=================
+
+* [Status](#status)
+* [Description](#description)
+* [Synopsis](#synopsis)
+* [Backend systems](#backend-systems)
+* [Developer Guide](#developer-guide)
+
+Status
+======
+
+This library is considered production ready.
+
+Description
+===========
+
 Lua module to send logs in batches to a backend system.
 The logs are sent when one of the following criteria is met:
 
@@ -33,6 +48,10 @@ When the backend returns a response code other than `200` all the logs are resen
 If the backend returns `200` but only some logs have failed, the list with failed logs are resent with the next flush.
 It is up to the backend to return the list with failed logs back.
 
+[Back to TOC](#table-of-contents)
+
+Synopsis
+========
 ### Example:
 
 ``` nginx
@@ -68,6 +87,8 @@ It is up to the backend to return the list with failed logs back.
     }
 ```
 
+[Back to TOC](#table-of-contents)
+
 Backend systems
 ===============
 
@@ -83,6 +104,7 @@ AwsSnsLogger backend
 --------------------
 Sends data to the AWS SNS, which can then forward the logs to an SQS.
 
+[Back to TOC](#table-of-contents)
 
 Developer guide
 ===============
@@ -116,4 +138,6 @@ This will only run `my_test.t` test file.
  make test
 ```
 This is intended to be used when the native binary is present and available on `$PATH`.
+
+[Back to TOC](#table-of-contents)
  
