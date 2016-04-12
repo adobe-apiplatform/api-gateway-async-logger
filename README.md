@@ -87,38 +87,33 @@ Sends data to the AWS SNS, which can then forward the logs to an SQS.
 Developer guide
 ===============
 
-## Install the api-gateway first
- Since this module is running inside the `api-gateway`, make sure the api-gateway binary is installed under `/usr/local/sbin`.
- You should have 2 binaries in there: `api-gateway` and `nginx`, the latter being only a symbolik link.
-
-## Update git submodules
-```
-git submodule update --init --recursive
-```
-
 ## Running the tests
-The tests are based on the `test-nginx` library.
-This library is added a git submodule under `test/resources/test-nginx/` folder, from `https://github.com/agentzh/test-nginx`.
 
-Test files are located in `test/perl`.
-The other libraries such as `Redis`, `test-nginx` are located in `test/resources/`.
+```bash
+ make test-docker
+```
+
+Test files are located in `test/perl` folder and are based on the `test-nginx` library.
+This library is added as a git submodule under `test/resources/test-nginx/` folder, from `https://github.com/agentzh/test-nginx`.
+
+The other libraries such as `Redis`, `test-nginx` would be located in `test/resources/`.
 Other files used when running the test are also located in `test/resources`.
 
->NOTE: The test for Kinesis requires temporary AWS Credentials as environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SECURITY_TOKEN`.
+ If you want to run a single test edit [docker-compose.yml](test/docker-compose.yml) and replace in `entrypoint` 
+ `/tmp/perl` with the actual path to the test ( i.e. `/tmp/perl/my_test.t`)
+ 
+ The complete `entrypoint` config would look like:
+```
+ entrypoint: ["prove", "-I", "/usr/local/test-nginx-0.24/lib", "-I", "/usr/local/test-nginx-0.24/inc", "-r", "/tmp/perl/my_test.t"]
+```
+This will only run `my_test.t` test file.
 
-## Build locally
- ```
-sudo LUA_LIB_DIR=/usr/local/api-gateway/lualib make install
- ```
-
-To execute the test issue the following command:
- ```
+## Running the tests with a native binary
+ 
+ The Makefile also exposes a way to run the tests using a native binary:
+ 
+```
  make test
- ```
-
- If you want to run a single test, the following command helps:
- ```
- PATH=/usr/local/sbin:$PATH TEST_NGINX_SERVROOT=`pwd`/target/servroot TEST_NGINX_PORT=1989 prove -I ./test/resources/test-nginx/lib -r ./test/perl/awsv4signature.t
- ```
- This command only executes the test `awsv4signature.t`.
-
+```
+This is intended to be used when the native binary is present and available on `$PATH`.
+ 

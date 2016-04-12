@@ -42,7 +42,7 @@ warn "Using nameservers: \n@nameservers\n";
 our $HttpConfig = <<_EOC_;
     # lua_package_path "$pwd/scripts/?.lua;;";
     lua_package_path 'src/lua/?.lua;/usr/local/lib/lua/?.lua;;';
-    lua_package_cpath 'src/lua/?.so;;';
+    # lua_package_cpath 'src/lua/?.so;;';
 
     init_by_lua '
         local v = require "jit.v"
@@ -50,8 +50,11 @@ our $HttpConfig = <<_EOC_;
         require "resty.core"
     ';
     resolver @nameservers;
-
     lua_shared_dict stats_all 1m;
+
+    client_body_temp_path /tmp/;
+    proxy_temp_path /tmp/;
+    fastcgi_temp_path /tmp/;
 _EOC_
 
 #no_diff();
@@ -103,6 +106,7 @@ X-Test: test
 
             content_by_lua '
                 local logger_factory = require "api-gateway.logger.factory"
+                local x = require "api-gateway.logger.backend.AwsKinesisLogger"
 
                 local logger_module = "api-gateway.logger.BufferedAsyncLogger"
                 local logger_opts = {
@@ -112,11 +116,12 @@ X-Test: test
                             backend_opts = {
                                 aws_region = "us-east-1",
                                 kinesis_stream_name = "test-stream",
-                                aws_iam_user = {
-                                    security_credentials_host = "127.0.0.1",      -- test only
-                                    security_credentials_port = $TEST_NGINX_PORT, -- test only
+                                aws_credentials = {
+                                    provider = "api-gateway.aws.AWSIAMCredentials",
+                                    shared_cache_dict = "stats_all",
                                     security_credentials_timeout = 60 * 60 * 24,
-                                    shared_cache_dict = "stats_all"
+                                    security_credentials_host = "127.0.0.1",      -- test only
+                                    security_credentials_port = $TEST_NGINX_PORT -- test only
                                 }
                             }
                         }
@@ -127,7 +132,8 @@ X-Test: test
                     ngx.say("OK")
                     return
                 end
-                ngx.say("logger_2 instance should have been returned from cache")
+                ngx.say("logger_2 instance should have been returned from cache. logger=" .. tostring(logger) ..
+                            "logger_2=" .. tostring(logger_2))
             ';
         }
 --- request

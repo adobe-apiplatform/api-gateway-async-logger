@@ -28,6 +28,10 @@ our $HttpConfig = <<_EOC_;
         v.on("$Test::Nginx::Util::ErrLogFile")
         require "resty.core"
     ';
+
+    client_body_temp_path /tmp/;
+    proxy_temp_path /tmp/;
+    fastcgi_temp_path /tmp/;
 _EOC_
 
 
@@ -216,7 +220,7 @@ value1,value2
                 end
                 ngx.say("1. Total logs:" .. logger:getCount())
                 ngx.say("1. Pending threads left:" .. logger:get_pending_threads())
-                ngx.sleep(0.500)
+                ngx.sleep(1.500)
                 ngx.say("2. Pending threads left:" .. logger:get_pending_threads())
                 ngx.say("3. Running threads left:" .. logger:get_running_threads())
                 ngx.say("4. Total logs left:" .. logger:getCount())
@@ -271,10 +275,10 @@ GET /t
                 ngx.sleep(0.500)
                 ngx.say("2. Pending threads left:" .. logger:get_pending_threads())
                 ngx.say("3. Running threads left:" .. logger:get_running_threads())
-                ngx.sleep(0.650) -- wait just enough to expire flush_interval
+                ngx.sleep(0.800) -- wait just enough to expire flush_interval
                 logger:logMetrics(71, "value71")  -- trigger the flush
                 ngx.say("4. Pending threads left:" .. logger:get_pending_threads())
-                ngx.sleep(0.100)
+                ngx.sleep(0.200)
                 ngx.say("5. Pending threads left:" .. logger:get_pending_threads())
                 ngx.say("6. Running threads left:" .. logger:get_running_threads())
                 -- at this point there should only be 1 log left in the buffer
@@ -406,7 +410,7 @@ GET /t
                 end
                 ngx.say("1. Total logs:" .. logger:getCount())
                 ngx.say("1. Pending threads left:" .. logger:get_pending_threads())
-                ngx.sleep(0.500)
+                ngx.sleep(1.500)
                 ngx.say("2. Pending threads left:" .. logger:get_pending_threads())
                 ngx.say("3. Running threads left:" .. logger:get_running_threads())
                 ngx.say("4. Total logs left:" .. logger:getCount())

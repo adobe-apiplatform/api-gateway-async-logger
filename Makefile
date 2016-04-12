@@ -16,6 +16,20 @@ install: all
 	$(INSTALL) src/lua/api-gateway/logger/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/
 	$(INSTALL) src/lua/api-gateway/logger/backend/* $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/backend/
 
+test-docker:
+	echo "running tests with docker ..."
+	mkdir  -p $(BUILD_DIR)
+	mkdir  -p $(BUILD_DIR)/test-logs
+	rm -f $(BUILD_DIR)/test-logs/*
+	mkdir -p ~/tmp/apiplatform/api-gateway-logger
+	cp -r ./src ~/tmp/apiplatform/api-gateway-logger/
+	cp -r ./test ~/tmp/apiplatform/api-gateway-logger/
+	cp -r ./target ~/tmp/apiplatform/api-gateway-logger/
+	TEST_NGINX_AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" TEST_NGINX_AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" TEST_NGINX_AWS_SECURITY_TOKEN="${AWS_SECURITY_TOKEN}"  \
+	    docker-compose -f ./test/docker-compose.yml up
+	cp -r ~/tmp/apiplatform/api-gateway-logger/target/ ./target
+	rm -rf  ~/tmp/apiplatform/api-gateway-logger
+
 test:
 	echo "updating git submodules ..."
 	if [ ! -d "test/resources/test-nginx/lib" ]; then	git submodule update --init --recursive; fi

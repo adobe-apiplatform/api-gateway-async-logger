@@ -46,6 +46,10 @@ our $HttpConfig = <<_EOC_;
         require "resty.core"
     ';
     resolver @nameservers;
+
+    client_body_temp_path /tmp/;
+    proxy_temp_path /tmp/;
+    fastcgi_temp_path /tmp/;
 _EOC_
 
 
