@@ -13,10 +13,8 @@ all: ;
 install: all
 	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/
 	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/backend
-	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/zmq/
 	$(INSTALL) src/lua/api-gateway/logger/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/
 	$(INSTALL) src/lua/api-gateway/logger/backend/* $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/logger/backend/
-	$(INSTALL) src/lua/api-gateway/zmq/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/api-gateway/zmq/
 
 test:
 	echo "updating git submodules ..."
