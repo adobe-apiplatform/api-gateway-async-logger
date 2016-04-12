@@ -217,12 +217,7 @@ function AsyncLogger:getLogsFromSharedDict()
                 and metric ~= "pendingTimers_lock"
                 and metric ~= "flush_lock"
                 and metric ~= "lastFlushTimestamp"
-                and metric ~= "throughput_counter"
-                and metric ~= "AccessKeyId"
-                and metric ~= "SecretAccessKey"
-                and metric ~= "Token"
-                and metric ~= "ExpireAt"
-                and metric ~= "ExpireAtTimestamp") then
+                and metric ~= "throughput_counter") then
             local v = allMetrics:get(metric)
             if (v ~= nil and metric ~= nil) then
                 logs[metric] = v
