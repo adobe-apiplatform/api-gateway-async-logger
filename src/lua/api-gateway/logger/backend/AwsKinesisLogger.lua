@@ -48,23 +48,15 @@ function _M:constructor(o)
     self.aws_access_key = o.aws_access_key
     self.aws_iam_user = o.aws_iam_user
 
-    local iam_user = o.aws_iam_user
-
     local kinesisServiceConfig = {
         aws_region = o.aws_region,
-        aws_secret_key = o.aws_secret_key,
-        aws_access_key = o.aws_access_key,
-        aws_debug = true, -- print warn level messages on the nginx logs
-        aws_conn_keepalive = 60000, -- how long to keep the sockets used for AWS alive
-        aws_conn_pool = 100 -- the connection pool size for sockets used to connect to AWS
+        aws_credentials = o.aws_credentials, -- credentials provider
+        aws_secret_key = o.aws_secret_key, -- deprecated but kept for backwards compatibility
+        aws_access_key = o.aws_access_key, -- deprecated but kept for backwards compatibility
+        aws_debug = o.aws_debug, -- print warn level messages on the nginx logs
+        aws_conn_keepalive = o.aws_conn_keepalive, -- how long to keep the sockets used for AWS alive
+        aws_conn_pool = o.aws_conn_pool -- the connection pool size for sockets used to connect to AWS
     }
-
-    if (iam_user ~= nil) then
-        kinesisServiceConfig.aws_iam_user = iam_user.iam_user
-        kinesisServiceConfig.security_credentials_host = iam_user.security_credentials_host
-        kinesisServiceConfig.security_credentials_port = iam_user.security_credentials_port
-        kinesisServiceConfig.shared_cache_dict = iam_user.shared_cache_dict
-    end
 
     kinesisService = KinesisService:new(kinesisServiceConfig)
 end

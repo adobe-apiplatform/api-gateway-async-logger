@@ -100,7 +100,8 @@ __DATA__
                     backend_opts = {
                         aws_region = ngx.var.aws_region,
                         kinesis_stream_name = ngx.var.kinesis_stream_name,
-                        aws_iam_user = {
+                        aws_credentials = {
+                            provider = "api-gateway.aws.AWSIAMCredentials",
                             security_credentials_host = "127.0.0.1",      -- test only
                             security_credentials_port = $TEST_NGINX_PORT, -- test only
                             security_credentials_timeout = 60 * 60 * 24,
