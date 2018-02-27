@@ -1,5 +1,5 @@
 package="api-gateway-async-logger"
-version="1.0-1"
+version="1.0.1-1"
 local function make_plat(plat)
     return { modules = {
         ["api-gateway.logger.AsyncLogger"] = "src/lua/api-gateway/logger/AsyncLogger.lua",
@@ -17,7 +17,7 @@ source = {
     tag = "1.0.1"
 }
 description = {
-    summary = "Lua Module providing api-gateway-async-logger gateway specific scripts.",
+    summary = "Lua Module providing an async-logger framework in the API Gateway.",
     license = "MIT"
 }
 dependencies = {
