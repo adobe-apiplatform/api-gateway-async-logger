@@ -13,7 +13,7 @@ local function make_plat(plat)
     } }
 end
 source = {
-    url = "https://github.com/adobe-apiplatform/api-gateway-async-logger.git",
+    url = "git://github.com/adobe-apiplatform/api-gateway-async-logger.git",
     tag = "1.0.1"
 }
 description = {
