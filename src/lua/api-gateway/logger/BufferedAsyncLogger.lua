@@ -308,7 +308,7 @@ local function doFlushMetrics(premature, self)
             end
         end
         if (logsToResendCounter > 0) then
-            ngx.log(ngx.WARN, "Resending: ", tostring(logsToResendCounter), " out of " , tostring(number_of_logs) , " logs again.")
+            ngx.log(ngx.DEBUG, "Resending: ", tostring(logsToResendCounter), " out of " , tostring(number_of_logs) , " logs again.")
         end
 
         if (self.callback ~= nil) then
@@ -326,7 +326,7 @@ local function doFlushMetrics(premature, self)
         end
         return
     end
-    ngx.log(ngx.WARN, "Could not flush metrics to backend ", tostring(self.backend) , " number_of_logs=", tostring(number_of_logs) )
+    ngx.log(ngx.DEBUG, "Could not flush metrics to backend ", tostring(self.backend) , " number_of_logs=", tostring(number_of_logs) )
 end
 
 local function flushMetrics_timerCallback(premature, self)
@@ -373,7 +373,7 @@ function AsyncLogger:flushMetrics()
         local delay = math.random(10, 100)
         local ok, err = ngx.timer.at(delay / 1000, flushMetrics_timerCallback, self)
         if not ok then
-            ngx.log(ngx.WARN, "Could not flushMetrics this time, will retry later. Details: ", err)
+            ngx.log(ngx.DEBUG, "Could not flushMetrics this time, will retry later. Details: ", err)
             return false
         end
         ngx.log(ngx.DEBUG, "Scheduling flushMetrics in " .. tostring(delay) .. "ms.")
