@@ -63,7 +63,7 @@ function AsyncLogger:new(o)
         ngx.log(ngx.DEBUG, "BufferedAsyncLogger(): init object=" .. s)
 
         o.flush_length = o.flush_length or DEFAULT_BUFFER_LENGTH
-        o.logerSharedDict = ngx.shared[o.sharedDict]
+        o.loggerSharedDict = ngx.shared[o.sharedDict]
         o.flush_concurrency = o.flush_concurrency or DEFAULT_CONCURRENCY
         o.flush_interval = o.flush_interval or DEFAULT_CONCURRENCY
         o.flush_throughput = o.flush_throughput or DEFAULT_FLUSH_THROUGHPUT
@@ -79,7 +79,7 @@ end
 
 -- Save the data into shared dict
 function AsyncLogger:logMetrics(key, value)
-    if (self.logerSharedDict == nil) then
+    if (self.loggerSharedDict == nil) then
         ngx.log(ngx.ERR, "Please define 'lua_shared_dict ", tostring(self.sharedDict), " 50m;' in http block")
         return nil
     end
@@ -93,9 +93,9 @@ function AsyncLogger:logMetrics(key, value)
     ngx.log(ngx.DEBUG, "adding new metric. key=", tostring(key), ", value=", tostring(value))
 
     -- count the number of values in the shared dict and flush when its full
-    local count = self.logerSharedDict:incr("counter", 1)
+    local count = self.loggerSharedDict:incr("counter", 1)
     if (count == nil) then
-        self.logerSharedDict:add("counter", 1)
+        self.loggerSharedDict:add("counter", 1)
         count = 1
     end
 
