@@ -100,7 +100,7 @@ function AsyncLogger:logMetrics(key, value)
     end
 
     -- add the key and value
-    local status = self.logerSharedDict:add(key, value)
+    local status = self.loggerSharedDict:add(key, value)
 
     if(self:shouldFlush()) then
         self:flushMetrics()
@@ -112,9 +112,9 @@ end
 --- Returns the number of logs as tracked in the "counter" element of the shared dictionary.
 --   This number should match the total number of items in the shared dictionary
 function AsyncLogger:getCount()
-    local count = self.logerSharedDict:get("counter")
+    local count = self.loggerSharedDict:get("counter")
     if (count == nil) then
-        self.logerSharedDict:add("counter", 0)
+        self.loggerSharedDict:add("counter", 0)
         count = 0
     end
     return count
@@ -127,19 +127,19 @@ end
 --   3. the throughput is not exceeded
 function AsyncLogger:shouldFlush()
     local count = self:getCount()
-    local lastFlushTimestamp = self.logerSharedDict:get("lastFlushTimestamp")
+    local lastFlushTimestamp = self.loggerSharedDict:get("lastFlushTimestamp")
     if (lastFlushTimestamp == nil) then
         lastFlushTimestamp = ngx.now()
         -- add method only sets the key if it doesn't exist
-        self.logerSharedDict:add("lastFlushTimestamp", lastFlushTimestamp)
+        self.loggerSharedDict:add("lastFlushTimestamp", lastFlushTimestamp)
     end
 
     -- also take into account any pending threads already scheduled
-    local pending_threads = self.logerSharedDict:get("pending_threads")
+    local pending_threads = self.loggerSharedDict:get("pending_threads")
     -- an approximate number of logs that could be sent by the pending threads
     local possible_extra_logs = (pending_threads or 0) * self.flush_length
 
-    local current_throughput = self.logerSharedDict:get("throughput_counter")
+    local current_throughput = self.loggerSharedDict:get("throughput_counter")
     if (current_throughput == nil) then
         current_throughput = 0
         local secs = ngx.now() --the elapsed time in seconds (including milliseconds as the decimal part) from the epoch
@@ -148,7 +148,7 @@ function AsyncLogger:shouldFlush()
         -- don't track the throughput when there's 50ms left from the current second
         if ( exptime > 0.050) then
             -- add method only sets the key if it doesn't exist
-            self.logerSharedDict:add("throughput_counter", current_throughput, exptime)
+            self.loggerSharedDict:add("throughput_counter", current_throughput, exptime)
         end
     end
 
@@ -184,7 +184,7 @@ end
 --  IMPORTANT: Make sure to obtain a lock before calling this method.
 function AsyncLogger:getLogsFromSharedDict()
     -- convert shared_dict to table
-    local allMetrics = self.logerSharedDict
+    local allMetrics = self.loggerSharedDict
     if (allMetrics == nil) then
         return nil
     end
@@ -192,7 +192,7 @@ function AsyncLogger:getLogsFromSharedDict()
     local logs = {}
     local logs_c = 0
 
-    local current_throughput = self.logerSharedDict:get("throughput_counter")
+    local current_throughput = self.loggerSharedDict:get("throughput_counter")
     current_throughput = current_throughput or 0
     local actual_flush_length = self.flush_length
     if (actual_flush_length + current_throughput >= self.flush_throughput) then
@@ -245,9 +245,9 @@ function AsyncLogger:getLogsFromSharedDict()
         ngx.log(ngx.DEBUG, "Correcting the 'counter' for the logs to 0.")
         remaining_logs = 0
     end
-    self.logerSharedDict:set("counter", remaining_logs)
+    self.loggerSharedDict:set("counter", remaining_logs)
     if (logs_c > 0) then
-        self.logerSharedDict:incr("throughput_counter", logs_c)
+        self.loggerSharedDict:incr("throughput_counter", logs_c)
     end
     return logs, logs_c
 end
@@ -333,32 +333,32 @@ local function flushMetrics_timerCallback(premature, self)
     ngx.log(ngx.DEBUG, "Flushing metrics with premature flag:", premature, " to backend:", tostring(self.backend), " self=", tostring(tableToString(self)) )
 
     -- decremenet the number of pending threads before flushing
-    self.logerSharedDict:incr("pending_threads", -1)
+    self.loggerSharedDict:incr("pending_threads", -1)
     -- increment the number of running threads
-    self.logerSharedDict:incr("running_threads", 1)
+    self.loggerSharedDict:incr("running_threads", 1)
 
     local ok, result = pcall(doFlushMetrics, premature, self)
 
     -- decrement the number of running threads
-    self.logerSharedDict:incr("running_threads", -1)
+    self.loggerSharedDict:incr("running_threads", -1)
     -- save a timestamp of the last flush
-    self.logerSharedDict:set("lastFlushTimestamp", ngx.now())
+    self.loggerSharedDict:set("lastFlushTimestamp", ngx.now())
 end
 
 function AsyncLogger:get_pending_threads()
-    local pending_threads = tonumber(self.logerSharedDict:get("pending_threads"))
+    local pending_threads = tonumber(self.loggerSharedDict:get("pending_threads"))
     if (pending_threads == nil or pending_threads < 0) then
         pending_threads = 0
-        self.logerSharedDict:add("pending_threads", 0)
+        self.loggerSharedDict:add("pending_threads", 0)
     end
     return pending_threads
 end
 
 function AsyncLogger:get_running_threads()
-    local running_threads = tonumber(self.logerSharedDict:get("running_threads"))
+    local running_threads = tonumber(self.loggerSharedDict:get("running_threads"))
     if (running_threads == nil or running_threads < 0) then
         running_threads = 0
-        self.logerSharedDict:add("running_threads", 0)
+        self.loggerSharedDict:add("running_threads", 0)
     end
     return running_threads
 end
@@ -378,7 +378,7 @@ function AsyncLogger:flushMetrics()
         end
         ngx.log(ngx.DEBUG, "Scheduling flushMetrics in " .. tostring(delay) .. "ms.")
         -- at this point we're certain the timer has started successfully
-        self.logerSharedDict:incr("pending_threads", 1)
+        self.loggerSharedDict:incr("pending_threads", 1)
         return true
     end
     -- concurrency limit is reached at this point, no more thread is spawn
